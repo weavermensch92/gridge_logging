@@ -1153,3 +1153,122 @@ export const TEAM_MATURITY = {
     expectedLevel: "Lv.3 조직 협업",
   },
 };
+
+// ================================
+// 인맥 맵 데이터
+// ================================
+export type PersonNode = {
+  id: string;
+  name: string;
+  role: string;
+  team: string;
+  teamColor: string;
+  email: string;
+  aimiLevel: number;
+  aimiScore: number;
+  aimiLabel: string;
+  skills: string[];
+  joinDate: string;
+  bio: string;
+};
+
+export type RelationEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: "협업" | "멘토링" | "보고" | "프로젝트";
+  label?: string;
+};
+
+export const PEOPLE_NODES: PersonNode[] = [
+  {
+    id: "u-001", name: "강지수", role: "Frontend Engineer", team: "개발팀", teamColor: "#1722E8",
+    email: "jisoo@softsquared.com", aimiLevel: 3, aimiScore: 42.1, aimiLabel: "Architect",
+    skills: ["Next.js", "TypeScript", "React", "Tailwind"],
+    joinDate: "2024-03-10", bio: "AI 기반 UI 설계에 특화된 프론트엔드 엔지니어",
+  },
+  {
+    id: "u-002", name: "이민준", role: "Backend Engineer", team: "개발팀", teamColor: "#1722E8",
+    email: "minjun@softsquared.com", aimiLevel: 2, aimiScore: 35.8, aimiLabel: "Reviewer",
+    skills: ["Node.js", "PostgreSQL", "Redis", "Docker"],
+    joinDate: "2024-01-15", bio: "인프라 자동화와 DB 최적화 담당 백엔드 엔지니어",
+  },
+  {
+    id: "u-003", name: "박서연", role: "UI/UX Designer", team: "디자인팀", teamColor: "#ec4899",
+    email: "seoyeon@softsquared.com", aimiLevel: 2, aimiScore: 31.7, aimiLabel: "Reviewer",
+    skills: ["Figma", "Design System", "Tailwind", "Motion"],
+    joinDate: "2024-05-02", bio: "접근성 중심 디자인 시스템 구축 전문 디자이너",
+  },
+  {
+    id: "u-004", name: "최현우", role: "Product Manager", team: "기획팀", teamColor: "#f59e0b",
+    email: "hyunwoo@softsquared.com", aimiLevel: 1, aimiScore: 28.9, aimiLabel: "Starter",
+    skills: ["PRD", "JTBD", "유저리서치", "로드맵"],
+    joinDate: "2023-11-20", bio: "데이터 기반 의사결정을 추구하는 프로덕트 매니저",
+  },
+  {
+    id: "u-005", name: "김태영", role: "Tech Lead", team: "개발팀", teamColor: "#1722E8",
+    email: "taeyoung@softsquared.com", aimiLevel: 3, aimiScore: 44.3, aimiLabel: "Architect",
+    skills: ["Architecture", "DevOps", "AI Strategy", "코드리뷰"],
+    joinDate: "2023-06-01", bio: "AI Ops 전략 수립과 팀 기술 방향 리드",
+  },
+  {
+    id: "u-006", name: "정다은", role: "Data Analyst", team: "기획팀", teamColor: "#f59e0b",
+    email: "daeun@softsquared.com", aimiLevel: 2, aimiScore: 33.5, aimiLabel: "Reviewer",
+    skills: ["Python", "SQL", "Tableau", "A/B Testing"],
+    joinDate: "2024-07-08", bio: "프로덕트 데이터 분석 및 실험 설계 담당",
+  },
+  {
+    id: "u-007", name: "윤성호", role: "DevOps Engineer", team: "개발팀", teamColor: "#1722E8",
+    email: "sungho@softsquared.com", aimiLevel: 2, aimiScore: 37.2, aimiLabel: "Reviewer",
+    skills: ["K8s", "CI/CD", "AWS", "Terraform"],
+    joinDate: "2024-02-19", bio: "클라우드 인프라 자동화 및 배포 파이프라인 운영",
+  },
+  {
+    id: "u-008", name: "한소희", role: "Brand Designer", team: "디자인팀", teamColor: "#ec4899",
+    email: "sohee@softsquared.com", aimiLevel: 1, aimiScore: 26.4, aimiLabel: "Starter",
+    skills: ["일러스트레이터", "Brand Identity", "모션그래픽"],
+    joinDate: "2024-09-03", bio: "브랜드 아이덴티티와 마케팅 비주얼 담당 디자이너",
+  },
+];
+
+export type AiCollabEdge = {
+  id: string;
+  source: string;
+  target: string;
+  aiType: "공동작업" | "AI 멘토링" | "리뷰" | "프롬프트 공유";
+  tool: string;
+  sessions: number;
+  topic: string;
+};
+
+export const AI_COLLAB_EDGES: AiCollabEdge[] = [
+  { id: "ai-01", source: "u-005", target: "u-001", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 8,  topic: "기술 리뷰" },
+  { id: "ai-02", source: "u-005", target: "u-002", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 6,  topic: "아키텍처 설계" },
+  { id: "ai-03", source: "u-005", target: "u-007", aiType: "리뷰",         tool: "claude-sonnet-4", sessions: 4,  topic: "인프라 리뷰" },
+  { id: "ai-04", source: "u-001", target: "u-002", aiType: "공동작업",     tool: "claude-sonnet-4", sessions: 12, topic: "API 연동 개발" },
+  { id: "ai-05", source: "u-001", target: "u-003", aiType: "공동작업",     tool: "gpt-4o",          sessions: 9,  topic: "디자인시스템 구현" },
+  { id: "ai-06", source: "u-001", target: "u-007", aiType: "공동작업",     tool: "claude-haiku",    sessions: 5,  topic: "배포 파이프라인" },
+  { id: "ai-07", source: "u-002", target: "u-007", aiType: "공동작업",     tool: "claude-haiku",    sessions: 7,  topic: "배포 자동화" },
+  { id: "ai-08", source: "u-004", target: "u-001", aiType: "프롬프트 공유", tool: "gpt-4o",         sessions: 5,  topic: "기능 스펙 전달" },
+  { id: "ai-09", source: "u-004", target: "u-003", aiType: "프롬프트 공유", tool: "gpt-4o",         sessions: 4,  topic: "UX 리뷰 요청" },
+  { id: "ai-10", source: "u-006", target: "u-004", aiType: "공동작업",     tool: "gemini-1.5-pro",  sessions: 6,  topic: "데이터 분석 리포트" },
+  { id: "ai-11", source: "u-003", target: "u-008", aiType: "리뷰",         tool: "gpt-4o",          sessions: 3,  topic: "브랜드 디자인 피드백" },
+  { id: "ai-12", source: "u-001", target: "u-006", aiType: "프롬프트 공유", tool: "claude-haiku",   sessions: 3,  topic: "분석 쿼리 공유" },
+  { id: "ai-13", source: "u-005", target: "u-004", aiType: "공동작업",     tool: "claude-sonnet-4", sessions: 5,  topic: "로드맵 AI 검토" },
+];
+
+export const RELATION_EDGES: RelationEdge[] = [
+  { id: "e-01", source: "u-005", target: "u-001", type: "멘토링", label: "기술 멘토링" },
+  { id: "e-02", source: "u-005", target: "u-002", type: "멘토링", label: "아키텍처 리뷰" },
+  { id: "e-03", source: "u-005", target: "u-007", type: "보고", label: "인프라 보고" },
+  { id: "e-04", source: "u-001", target: "u-002", type: "협업", label: "API 연동" },
+  { id: "e-05", source: "u-001", target: "u-003", type: "프로젝트", label: "디자인시스템" },
+  { id: "e-06", source: "u-002", target: "u-007", type: "협업", label: "배포 자동화" },
+  { id: "e-07", source: "u-003", target: "u-008", type: "협업", label: "브랜드 협업" },
+  { id: "e-08", source: "u-004", target: "u-001", type: "프로젝트", label: "기능 기획" },
+  { id: "e-09", source: "u-004", target: "u-003", type: "프로젝트", label: "UX 리뷰" },
+  { id: "e-10", source: "u-004", target: "u-006", type: "협업", label: "데이터 분석" },
+  { id: "e-11", source: "u-006", target: "u-004", type: "보고", label: "지표 리포트" },
+  { id: "e-12", source: "u-005", target: "u-004", type: "협업", label: "로드맵 조율" },
+  { id: "e-13", source: "u-001", target: "u-007", type: "협업", label: "배포 연동" },
+];

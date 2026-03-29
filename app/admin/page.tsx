@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Users, DollarSign, Activity, Clock,
@@ -9,8 +9,10 @@ import {
   FileText, FileSpreadsheet, Presentation, FileType2, Database,
   Eye, Download, MessageSquare, Share2, TrendingUp, Layers,
   AlertTriangle, CheckCircle2, Zap, Target, BarChart3,
-  ChevronRight as ChevronRightIcon,
+  ChevronRight as ChevronRightIcon, Network,
 } from "lucide-react";
+
+const PeopleMap = lazy(() => import("./PeopleMap"));
 import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip,
@@ -761,7 +763,7 @@ function FileDashboard() {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"logs" | "maturity" | "files">("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "maturity" | "files" | "people">("logs");
   const [teamFilter, setTeamFilter] = useState<string>("전체");
   const [channelFilter, setChannelFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
@@ -874,6 +876,7 @@ export default function AdminPage() {
             { key: "logs",     label: "AI 로그",    icon: <Activity   className="w-4 h-4" /> },
             { key: "maturity", label: "AI 성숙도",   icon: <BarChart3  className="w-4 h-4" /> },
             { key: "files",    label: "공유 파일",   icon: <Share2     className="w-4 h-4" /> },
+            { key: "people",   label: "인맥도",      icon: <Network    className="w-4 h-4" /> },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -892,9 +895,14 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* ── 공유 파일 탭 ── */}
+        {/* ── 탭 콘텐츠 ── */}
         {activeTab === "maturity" && <MaturityDashboard />}
         {activeTab === "files" && <FileDashboard />}
+        {activeTab === "people" && (
+          <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">인맥도 로딩 중...</div>}>
+            <PeopleMap />
+          </Suspense>
+        )}
 
         {/* ── AI 로그 탭 ── */}
         {activeTab === "logs" && <>
