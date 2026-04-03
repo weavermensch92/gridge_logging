@@ -10,6 +10,8 @@ import {
   Eye, Download, MessageSquare, Share2, TrendingUp, Layers,
   AlertTriangle, CheckCircle2, Zap, Target, BarChart3,
   ChevronRight as ChevronRightIcon, Network,
+  Bot, Terminal, FileCode, Edit3, Search as SearchIcon, Globe,
+  Shield, ToggleLeft, ToggleRight, XCircle,
 } from "lucide-react";
 
 const PeopleMap = lazy(() => import("./PeopleMap"));
@@ -18,9 +20,10 @@ import {
   PieChart, Pie, Cell, Tooltip,
 } from "recharts";
 import {
-  MOCK_LOGS, MOCK_TEAMS, Log,
+  MOCK_LOGS, MOCK_TEAMS, Log, AgentDetail, AgentStep, ToolCall, FileChange,
   SHARED_FILES, SharedFile, FileType, FileStatus,
   TEAM_MATURITY,
+  MOCK_RISK_RULES, MOCK_RISK_ALERTS, RiskRule, RiskAlert, RiskSeverity, RiskCategory,
 } from "@/lib/mockData";
 import clsx from "clsx";
 
@@ -63,24 +66,195 @@ function StatCard({
   );
 }
 
-function LogRow({ log }: { log: Log }) {
+// ── 에이전트 모드 헬퍼 ──
+const isAgentLog = (log: Log) => log.mode === "agent" && !!log.agent_detail;
+
+const PHASE_STYLE: Record<string, { color: string; bg: string; label: string }> = {
+  plan:     { color: "#3b82f6", bg: "#eff6ff", label: "Plan" },
+  execute:  { color: "#7c3aed", bg: "#f5f3ff", label: "Execute" },
+  verify:   { color: "#10b981", bg: "#ecfdf5", label: "Verify" },
+  iterate:  { color: "#f59e0b", bg: "#fffbeb", label: "Iterate" },
+};
+
+const TOOL_ICON: Record<string, React.ReactNode> = {
+  bash: <Terminal className="w-3 h-3" />,
+  file_read: <FileCode className="w-3 h-3" />,
+  file_write: <FileCode className="w-3 h-3" />,
+  edit: <Edit3 className="w-3 h-3" />,
+  grep: <SearchIcon className="w-3 h-3" />,
+  glob: <SearchIcon className="w-3 h-3" />,
+  web_search: <Globe className="w-3 h-3" />,
+};
+
+const FILE_ACTION_STYLE: Record<string, { color: string; label: string }> = {
+  created:  { color: "#10b981", label: "+" },
+  modified: { color: "#3b82f6", label: "~" },
+  deleted:  { color: "#ef4444", label: "-" },
+};
+
+// ── 알림 헬퍼 ──
+const alertsMap = new Map<string, RiskAlert[]>();
+MOCK_RISK_ALERTS.forEach(a => {
+  if (!alertsMap.has(a.log_id)) alertsMap.set(a.log_id, []);
+  alertsMap.get(a.log_id)!.push(a);
+});
+
+const SEVERITY_STYLE: Record<RiskSeverity, { color: string; bg: string; label: string }> = {
+  critical: { color: "#ef4444", bg: "#fef2f2", label: "위험" },
+  warning:  { color: "#f59e0b", bg: "#fffbeb", label: "주의" },
+  info:     { color: "#3b82f6", bg: "#eff6ff", label: "참고" },
+};
+
+function AgentBriefModal({ log, onClose }: { log: Log; onClose: () => void }) {
+  const d = log.agent_detail!;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+      onClick={onClose}>
+      <div className="glass rounded-2xl p-6 w-[680px] max-h-[80vh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-violet-600" />
+            <div>
+              <h3 className="text-base font-bold text-gray-800">에이전트 기획 요약</h3>
+              <p className="text-xs text-gray-400">{log.user_name} · {new Date(log.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* 초기 요청 (입력 프롬프트) */}
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center text-[10px] font-bold text-violet-600">Q</div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">초기 요청 프롬프트</p>
+          </div>
+          <div className="bg-violet-50/60 rounded-xl p-3 text-sm text-gray-700 leading-relaxed border border-violet-100">
+            {log.prompt}
+          </div>
+        </div>
+
+        {/* 구현 결과 요약 */}
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-600">R</div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">구현 결과 요약</p>
+          </div>
+          <div className="bg-emerald-50/60 rounded-xl p-3 text-sm text-gray-700 leading-relaxed border border-emerald-100">
+            {d.summary}
+          </div>
+        </div>
+
+        {/* 단계별 변화 */}
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">단계별 실행 흐름</p>
+          <div className="flex items-center gap-1 flex-wrap">
+            {d.steps.map((step, i) => {
+              const ps = PHASE_STYLE[step.phase];
+              return (
+                <div key={step.step} className="flex items-center gap-1">
+                  <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: ps.bg, color: ps.color }}>
+                    {step.step}. {step.description}
+                  </span>
+                  {i < d.steps.length - 1 && <ChevronRightIcon className="w-3 h-3 text-gray-300 flex-shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 파일 변경 요약 */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            파일 변경 내역 ({d.files_changed.length}개)
+          </p>
+          <div className="bg-white/50 rounded-xl p-3 space-y-1.5">
+            {d.files_changed.map(fc => {
+              const as = FILE_ACTION_STYLE[fc.action];
+              const actionLabel = fc.action === "created" ? "생성" : fc.action === "modified" ? "수정" : "삭제";
+              return (
+                <div key={fc.path} className="flex items-center gap-2 text-xs">
+                  <span className="font-bold w-8 text-center text-[10px] px-1 py-0.5 rounded"
+                    style={{ background: `${as.color}18`, color: as.color }}>{actionLabel}</span>
+                  <span className="font-mono text-gray-600 flex-1 truncate">{fc.path}</span>
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">{fc.language}</span>
+                  <span className="text-green-600 text-[10px]">+{fc.additions}</span>
+                  {fc.deletions > 0 && <span className="text-red-400 text-[10px]">-{fc.deletions}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogRow({ log, onShowBrief }: { log: Log; onShowBrief?: (log: Log) => void }) {
   const [open, setOpen] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
+  const [showCode, setShowCode] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const agent = isAgentLog(log);
+  const d = log.agent_detail;
+  const alerts = alertsMap.get(log.id) ?? [];
+  const highestSev = alerts.length > 0
+    ? (alerts.some(a => a.severity === "critical") ? "critical" : alerts.some(a => a.severity === "warning") ? "warning" : "info")
+    : null;
+
+  const toggleStep = (s: number) => setExpandedSteps(prev => {
+    const next = new Set(prev);
+    next.has(s) ? next.delete(s) : next.add(s);
+    return next;
+  });
 
   return (
     <>
       <tr
-        className="border-b border-white/50 hover:bg-white/30 cursor-pointer transition-colors"
+        className={clsx(
+          "border-b border-white/50 hover:bg-white/30 cursor-pointer transition-colors",
+          highestSev === "critical" && "border-l-2 border-l-red-400",
+          highestSev === "warning" && "border-l-2 border-l-amber-400",
+          highestSev === "info" && "border-l-2 border-l-blue-300",
+        )}
         onClick={() => setOpen(v => !v)}
       >
-        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{log.user_name}</td>
+        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+          <span className="flex items-center gap-1.5">
+            {highestSev && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: SEVERITY_STYLE[highestSev as RiskSeverity].color }} />}
+            {log.user_name}
+          </span>
+        </td>
         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{log.team}</td>
         <td className="px-4 py-3">
-          <span className={clsx("text-xs font-medium px-2 py-0.5 rounded-full", CHANNEL_COLORS[log.channel])}>
-            {log.channel}
+          <span className="flex items-center gap-1">
+            <span className={clsx("text-xs font-medium px-2 py-0.5 rounded-full", CHANNEL_COLORS[log.channel])}>
+              {log.channel}
+            </span>
+            {agent && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 flex items-center gap-0.5">
+                <Bot className="w-3 h-3" /> Agent
+              </span>
+            )}
           </span>
         </td>
         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{log.model}</td>
-        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">{log.prompt}</td>
+        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+          <span className="flex items-center gap-1.5">
+            {agent ? d!.summary : log.prompt}
+            {agent && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onShowBrief?.(log); }}
+                className="flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 hover:bg-violet-200 transition-colors whitespace-nowrap"
+              >
+                요약 보기
+              </button>
+            )}
+          </span>
+        </td>
         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
           {log.input_tokens + log.output_tokens}
         </td>
@@ -88,7 +262,7 @@ function LogRow({ log }: { log: Log }) {
           ${log.cost_usd.toFixed(6)}
         </td>
         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-          {log.latency_ms}ms
+          {agent ? `${(log.latency_ms / 1000).toFixed(0)}s` : `${log.latency_ms}ms`}
         </td>
         <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
           {new Date(log.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
@@ -100,16 +274,155 @@ function LogRow({ log }: { log: Log }) {
       {open && (
         <tr className="bg-white/20">
           <td colSpan={10} className="px-6 py-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
-                <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
+            {/* 보안 알림 */}
+            {alerts.length > 0 && (
+              <div className="mb-4 space-y-1.5">
+                {alerts.filter(a => !a.dismissed).map(a => (
+                  <div key={a.id} className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
+                    style={{ background: SEVERITY_STYLE[a.severity].bg }}>
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: SEVERITY_STYLE[a.severity].color }} />
+                    <span className="font-medium" style={{ color: SEVERITY_STYLE[a.severity].color }}>
+                      {SEVERITY_STYLE[a.severity].label}
+                    </span>
+                    <span className="text-gray-600">
+                      {MOCK_RISK_RULES.find(r => r.id === a.rule_id)?.name} — <span className="font-mono text-gray-500">{a.matched_pattern}</span>
+                    </span>
+                    <span className="text-gray-400 ml-auto truncate max-w-xs">{a.matched_text_preview}</span>
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
-                <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
+            )}
+
+            {agent && d ? (
+              <>
+                {/* 세션 헤더 */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: "소요 시간", value: `${(d.session_duration_ms / 1000).toFixed(0)}초` },
+                    { label: "스텝 수", value: `${d.total_steps}단계` },
+                    { label: "도구 호출", value: `${d.total_tool_calls}회` },
+                    { label: "변경 파일", value: `${d.files_changed.length}개` },
+                  ].map(s => (
+                    <div key={s.label} className="bg-violet-50/80 rounded-xl px-3 py-2 text-center">
+                      <div className="text-sm font-bold text-violet-700">{s.value}</div>
+                      <div className="text-[10px] text-violet-400">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-5 gap-4 mb-4">
+                  {/* 워크플로 타임라인 */}
+                  <div className="col-span-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Workflow Timeline</p>
+                    <div className="space-y-2">
+                      {d.steps.map(step => {
+                        const ps = PHASE_STYLE[step.phase];
+                        const isOpen = expandedSteps.has(step.step);
+                        return (
+                          <div key={step.step} className="bg-white/50 rounded-xl overflow-hidden">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleStep(step.step); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/40 transition-colors"
+                            >
+                              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: ps.bg, color: ps.color }}>
+                                {ps.label}
+                              </span>
+                              <span className="text-xs text-gray-700 flex-1">{step.description}</span>
+                              <span className="text-[10px] text-gray-400">{step.tool_calls.length} calls</span>
+                              {isOpen ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                            </button>
+                            {isOpen && (
+                              <div className="px-3 pb-2 space-y-1">
+                                {step.tool_calls.map(tc => (
+                                  <div key={tc.id} className="flex items-center gap-2 text-[11px] py-1 px-2 bg-gray-50/80 rounded-lg">
+                                    <span className="text-gray-400">{TOOL_ICON[tc.type] ?? <Terminal className="w-3 h-3" />}</span>
+                                    <span className="font-mono text-gray-600 truncate max-w-[200px]">{tc.input}</span>
+                                    <span className="text-gray-400 truncate flex-1">{tc.output_summary}</span>
+                                    <span className="text-gray-300 text-[10px] flex-shrink-0">{tc.duration_ms}ms</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 파일 변경 패널 */}
+                  <div className="col-span-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-2">File Changes</p>
+                    <div className="bg-white/50 rounded-xl p-3 space-y-1.5">
+                      {d.files_changed.map(fc => {
+                        const as = FILE_ACTION_STYLE[fc.action];
+                        return (
+                          <div key={fc.path} className="flex items-center gap-2 text-[11px]">
+                            <span className="font-bold w-4 text-center" style={{ color: as.color }}>{as.label}</span>
+                            <span className="font-mono text-gray-600 truncate flex-1">{fc.path}</span>
+                            <span className="text-green-600 text-[10px]">+{fc.additions}</span>
+                            {fc.deletions > 0 && <span className="text-red-500 text-[10px]">-{fc.deletions}</span>}
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">{fc.language}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 코드 산출물 (접이식) */}
+                {d.code_artifacts.length > 0 && (
+                  <div className="mb-3">
+                    <button onClick={(e) => { e.stopPropagation(); setShowCode(!showCode); }}
+                      className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase mb-1 hover:text-gray-600">
+                      <FileCode className="w-3 h-3" /> Code Artifacts
+                      {showCode ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                    {showCode && (
+                      <div className="space-y-2">
+                        {d.code_artifacts.map(ca => (
+                          <div key={ca.filename}>
+                            <div className="text-[10px] font-mono text-gray-400 mb-0.5">{ca.filename}</div>
+                            <pre className="bg-gray-900 text-green-400 text-[11px] rounded-lg p-3 overflow-x-auto font-mono leading-relaxed">
+                              {ca.snippet}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Raw Prompt/Response (접이식) */}
+                <button onClick={(e) => { e.stopPropagation(); setShowRaw(!showRaw); }}
+                  className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase hover:text-gray-600">
+                  Raw Prompt / Response {showRaw ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {showRaw && (
+                  <div className="grid grid-cols-2 gap-4 mt-2 text-sm">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
+                      <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
+                      <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* 기존 chat 모드 상세 */
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
+                  <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
+                  <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
+                </div>
               </div>
-            </div>
+            )}
           </td>
         </tr>
       )}
@@ -126,6 +439,277 @@ const LEVEL_COLOR: Record<string, string> = {
   "Lv.2~3": "bg-amber-100 text-amber-700",
   "Lv.2": "bg-gray-100 text-gray-600",
 };
+
+// ── SecurityDashboard 컴포넌트 ─────────────────────────────────
+const CATEGORY_STYLE: Record<RiskCategory, { color: string; bg: string; label: string }> = {
+  confidential: { color: "#ef4444", bg: "#fef2f2", label: "기밀 정보" },
+  non_work:     { color: "#3b82f6", bg: "#eff6ff", label: "업무 외" },
+  security:     { color: "#7c3aed", bg: "#f5f3ff", label: "보안" },
+  compliance:   { color: "#f59e0b", bg: "#fffbeb", label: "컴플라이언스" },
+  custom:       { color: "#6b7280", bg: "#f9fafb", label: "커스텀" },
+};
+
+function SecurityDashboard() {
+  const [secTab, setSecTab] = useState<"rules" | "dashboard">("rules");
+  const [rules, setRules] = useState(MOCK_RISK_RULES);
+  const [selectedRule, setSelectedRule] = useState<RiskRule | null>(null);
+  const [alerts, setAlerts] = useState(MOCK_RISK_ALERTS);
+
+  const toggleRule = (id: string) => {
+    setRules(rs => rs.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  };
+
+  const dismissAlert = (id: string) => {
+    setAlerts(as => as.map(a => a.id === id ? { ...a, dismissed: true } : a));
+  };
+
+  // 규칙 미리보기: 기존 로그 대상 패턴 매칭
+  const previewMatches = useMemo(() => {
+    if (!selectedRule) return [];
+    return MOCK_LOGS.filter(log => {
+      const text = selectedRule.match_field === "both"
+        ? `${log.prompt} ${log.response}`
+        : log[selectedRule.match_field];
+      return selectedRule.patterns.some(p => text.toLowerCase().includes(p.toLowerCase()));
+    }).slice(0, 5);
+  }, [selectedRule]);
+
+  // 통계
+  const activeAlerts = alerts.filter(a => !a.dismissed);
+  const criticalCount = activeAlerts.filter(a => a.severity === "critical").length;
+  const warningCount = activeAlerts.filter(a => a.severity === "warning").length;
+  const infoCount = activeAlerts.filter(a => a.severity === "info").length;
+  const enabledRulesCount = rules.filter(r => r.enabled).length;
+
+  const sevPieData = [
+    { name: "위험", value: criticalCount, color: "#ef4444" },
+    { name: "주의", value: warningCount, color: "#f59e0b" },
+    { name: "참고", value: infoCount, color: "#3b82f6" },
+  ].filter(d => d.value > 0);
+
+  return (
+    <div>
+      {/* 서브탭 */}
+      <div className="flex gap-1 glass rounded-xl p-1 mb-6 w-fit">
+        {([
+          { key: "rules" as const, label: "보안 규칙" },
+          { key: "dashboard" as const, label: "감지 현황" },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setSecTab(t.key)}
+            className={clsx(
+              "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              secTab === t.key ? "text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-white/40",
+            )}
+            style={secTab === t.key ? { background: "#ef4444" } : {}}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {secTab === "rules" && (
+        <div className="space-y-3">
+          {rules.map(rule => {
+            const cat = CATEGORY_STYLE[rule.category];
+            const sev = SEVERITY_STYLE[rule.severity];
+            return (
+              <div key={rule.id}
+                className={clsx("glass rounded-2xl p-4 transition-all cursor-pointer hover:shadow-md", !rule.enabled && "opacity-50")}
+                onClick={() => setSelectedRule(rule)}
+              >
+                <div className="flex items-center gap-3">
+                  {/* 토글 */}
+                  <button onClick={(e) => { e.stopPropagation(); toggleRule(rule.id); }}
+                    className="flex-shrink-0">
+                    {rule.enabled
+                      ? <ToggleRight className="w-6 h-6 text-green-500" />
+                      : <ToggleLeft className="w-6 h-6 text-gray-300" />}
+                  </button>
+                  {/* 이름 + 설명 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-semibold text-gray-800">{rule.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: cat.bg, color: cat.color }}>
+                        {cat.label}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: sev.bg, color: sev.color }}>
+                        {sev.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{rule.description}</p>
+                  </div>
+                  {/* 패턴 수 */}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-xs text-gray-400">{rule.patterns.length}개 패턴</div>
+                    <div className="text-[10px] text-gray-300">{rule.match_field === "both" ? "전체" : rule.match_field}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* 규칙 상세 모달 */}
+          {selectedRule && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+              onClick={() => setSelectedRule(null)}>
+              <div className="glass rounded-2xl p-6 w-[600px] max-h-[80vh] overflow-y-auto shadow-2xl"
+                onClick={e => e.stopPropagation()}>
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">{selectedRule.name}</h3>
+                    <p className="text-xs text-gray-500 mt-1">{selectedRule.description}</p>
+                  </div>
+                  <button onClick={() => setSelectedRule(null)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* 메타 정보 */}
+                <div className="flex gap-2 mb-4">
+                  <span className="text-xs px-2 py-1 rounded-lg" style={{ background: CATEGORY_STYLE[selectedRule.category].bg, color: CATEGORY_STYLE[selectedRule.category].color }}>
+                    {CATEGORY_STYLE[selectedRule.category].label}
+                  </span>
+                  <span className="text-xs px-2 py-1 rounded-lg" style={{ background: SEVERITY_STYLE[selectedRule.severity].bg, color: SEVERITY_STYLE[selectedRule.severity].color }}>
+                    {SEVERITY_STYLE[selectedRule.severity].label}
+                  </span>
+                  <span className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600">
+                    검사 대상: {selectedRule.match_field === "both" ? "프롬프트 + 응답" : selectedRule.match_field}
+                  </span>
+                </div>
+
+                {/* 패턴 목록 */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-2">감지 패턴</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedRule.patterns.map(p => (
+                      <span key={p} className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">{p}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 미리보기 */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-2">
+                    매칭 미리보기 ({previewMatches.length}건)
+                  </p>
+                  {previewMatches.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-4 text-center">매칭되는 로그가 없습니다.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {previewMatches.map(log => (
+                        <div key={log.id} className="bg-white/50 rounded-lg p-2 text-xs">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-700">{log.user_name}</span>
+                            <span className="text-gray-400">{new Date(log.timestamp).toLocaleDateString("ko-KR")}</span>
+                          </div>
+                          <p className="text-gray-600 truncate">{log.prompt}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {secTab === "dashboard" && (
+        <div>
+          {/* 통계 카드 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <StatCard icon={<AlertTriangle className="w-4 h-4" />} label="플래그 로그" value={`${activeAlerts.length}건`} />
+            <StatCard icon={<XCircle className="w-4 h-4" />} label="위험(Critical)" value={`${criticalCount}건`} sub="즉시 조치 필요" />
+            <StatCard icon={<AlertTriangle className="w-4 h-4" />} label="주의(Warning)" value={`${warningCount}건`} />
+            <StatCard icon={<Shield className="w-4 h-4" />} label="활성 규칙" value={`${enabledRulesCount}개`} sub={`전체 ${rules.length}개`} />
+          </div>
+
+          {/* 심각도 분포 + 플래그 로그 */}
+          <div className="grid grid-cols-4 gap-4">
+            {/* 분포 차트 */}
+            <div className="glass rounded-2xl p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-3">심각도 분포</p>
+              {sevPieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie data={sevPieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      innerRadius={35} outerRadius={60} paddingAngle={4}>
+                      {sevPieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => `${v}건`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-xs text-gray-400 py-12 text-center">알림 없음</p>
+              )}
+              <div className="space-y-1 mt-2">
+                {sevPieData.map(d => (
+                  <div key={d.name} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                    <span className="text-gray-600">{d.name}</span>
+                    <span className="ml-auto font-semibold text-gray-800">{d.value}건</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 플래그 로그 테이블 */}
+            <div className="col-span-3 glass rounded-2xl p-4 overflow-x-auto">
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-3">플래그 로그</p>
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-200/50 text-xs text-gray-400 uppercase">
+                    <th className="px-3 py-2">심각도</th>
+                    <th className="px-3 py-2">규칙</th>
+                    <th className="px-3 py-2">유저</th>
+                    <th className="px-3 py-2">매칭 패턴</th>
+                    <th className="px-3 py-2">매칭 내용</th>
+                    <th className="px-3 py-2">시간</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeAlerts.map(a => {
+                    const rule = MOCK_RISK_RULES.find(r => r.id === a.rule_id);
+                    const log = MOCK_LOGS.find(l => l.id === a.log_id);
+                    const sev = SEVERITY_STYLE[a.severity];
+                    return (
+                      <tr key={a.id} className="border-b border-white/40 hover:bg-white/20 transition-colors">
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                            style={{ background: sev.bg, color: sev.color }}>{sev.label}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-700 font-medium">{rule?.name ?? "-"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{log?.user_name ?? "-"}</td>
+                        <td className="px-3 py-2">
+                          <span className="font-mono text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{a.matched_pattern}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{a.matched_text_preview}</td>
+                        <td className="px-3 py-2 text-[10px] text-gray-400 whitespace-nowrap">
+                          {new Date(a.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button onClick={() => dismissAlert(a.id)}
+                            className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">해제</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {activeAlerts.length === 0 && (
+                <div className="py-8 text-center text-sm text-gray-400">
+                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                  모든 알림이 해제되었습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GaugeRing({ score }: { score: number }) {
   const max = 100; const r = 54; const cx = 70; const cy = 70;
@@ -763,7 +1347,7 @@ function FileDashboard() {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"logs" | "maturity" | "files" | "people">("logs");
+  const [activeTab, setActiveTab] = useState<"logs" | "maturity" | "files" | "people" | "security">("logs");
   const [teamFilter, setTeamFilter] = useState<string>("전체");
   const [channelFilter, setChannelFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
@@ -771,6 +1355,7 @@ export default function AdminPage() {
   const [dateTo, setDateTo] = useState("");
   const [activePreset, setActivePreset] = useState<string>("");
   const [page, setPage] = useState(1);
+  const [briefLog, setBriefLog] = useState<Log | null>(null);
 
   function applyPreset(days: number, label: string) {
     const now = new Date();
@@ -806,7 +1391,7 @@ export default function AdminPage() {
       if (logDate > dateTo) return false;
     }
     return true;
-  }), [teamFilter, channelFilter, search, dateFrom, dateTo]);
+  }).sort((a, b) => b.timestamp.localeCompare(a.timestamp)), [teamFilter, channelFilter, search, dateFrom, dateTo]);
 
   // 필터된 결과 기준 통계
   const filteredStats = useMemo(() => ({
@@ -877,6 +1462,7 @@ export default function AdminPage() {
             { key: "maturity", label: "AI 성숙도",   icon: <BarChart3  className="w-4 h-4" /> },
             { key: "files",    label: "공유 파일",   icon: <Share2     className="w-4 h-4" /> },
             { key: "people",   label: "인맥도",      icon: <Network    className="w-4 h-4" /> },
+            { key: "security", label: "보안 설정",   icon: <Shield     className="w-4 h-4" /> },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -898,6 +1484,7 @@ export default function AdminPage() {
         {/* ── 탭 콘텐츠 ── */}
         {activeTab === "maturity" && <MaturityDashboard />}
         {activeTab === "files" && <FileDashboard />}
+        {activeTab === "security" && <SecurityDashboard />}
         {activeTab === "people" && (
           <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">인맥도 로딩 중...</div>}>
             <PeopleMap />
@@ -1092,7 +1679,7 @@ export default function AdminPage() {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map(log => <LogRow key={log.id} log={log} />)
+                  paginated.map(log => <LogRow key={log.id} log={log} onShowBrief={setBriefLog} />)
                 )}
               </tbody>
             </table>
@@ -1205,6 +1792,7 @@ export default function AdminPage() {
         </div>
         </> /* AI 로그 탭 끝 */}
       </div>
+      {briefLog && <AgentBriefModal log={briefLog} onClose={() => setBriefLog(null)} />}
     </main>
   );
 }
