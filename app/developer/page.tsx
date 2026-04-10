@@ -10,7 +10,8 @@ import {
   Activity, DollarSign, Clock, Zap, History,
   Bot, Terminal, FileCode, Edit3, Search as SearchIcon, Globe,
 } from "lucide-react";
-import { MY_LOGS, MATURITY_DATA, Log } from "@/lib/mockData";
+import type { Log } from "@/types";
+import { MY_LOGS, MATURITY_DATA } from "@/lib/mockData";
 import clsx from "clsx";
 
 const CHANNEL_COLORS: Record<string, string> = {

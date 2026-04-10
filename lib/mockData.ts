@@ -1,3 +1,15 @@
+import type {
+  Log, AgentDetail, AgentStep, ToolCall, FileChange, ToolCallType,
+  RiskRule, RiskAlert, RiskSeverity, RiskCategory,
+  ReportSummary, SharedFile, FileType, FileStatus,
+} from "@/types";
+
+// Re-export types for backward compatibility
+export type { Log, AgentDetail, AgentStep, ToolCall, FileChange, ToolCallType } from "@/types";
+export type { RiskRule, RiskAlert, RiskSeverity, RiskCategory } from "@/types";
+export type { ReportSummary } from "@/types";
+export type { SharedFile, FileType, FileStatus } from "@/types";
+
 // ================================
 // 조직 / 팀 / 유저
 // ================================
@@ -19,91 +31,7 @@ export const MOCK_USERS = [
 // ================================
 // 로그 데이터
 // ================================
-// ── 에이전트 모드 타입 ──
-export type ToolCallType = "file_read" | "file_write" | "bash" | "grep" | "glob" | "edit" | "web_search";
-
-export type ToolCall = {
-  id: string;
-  type: ToolCallType;
-  input: string;
-  output_summary: string;
-  timestamp: string;
-  duration_ms: number;
-};
-
-export type FileChange = {
-  path: string;
-  action: "created" | "modified" | "deleted";
-  additions: number;
-  deletions: number;
-  language: string;
-};
-
-export type AgentStep = {
-  step: number;
-  phase: "plan" | "execute" | "verify" | "iterate";
-  description: string;
-  tool_calls: ToolCall[];
-  timestamp: string;
-};
-
-export type AgentDetail = {
-  session_id: string;
-  session_duration_ms: number;
-  total_steps: number;
-  total_tool_calls: number;
-  files_changed: FileChange[];
-  steps: AgentStep[];
-  code_artifacts: { filename: string; language: string; snippet: string }[];
-  summary: string;
-};
-
-// ── 보안 감지 타입 ──
-export type RiskSeverity = "info" | "warning" | "critical";
-export type RiskCategory = "confidential" | "non_work" | "security" | "compliance" | "custom";
-
-export type RiskRule = {
-  id: string;
-  name: string;
-  description: string;
-  category: RiskCategory;
-  severity: RiskSeverity;
-  enabled: boolean;
-  patterns: string[];
-  match_field: "prompt" | "response" | "both";
-  created_at: string;
-  updated_at: string;
-};
-
-export type RiskAlert = {
-  id: string;
-  rule_id: string;
-  log_id: string;
-  severity: RiskSeverity;
-  matched_pattern: string;
-  matched_text_preview: string;
-  timestamp: string;
-  dismissed: boolean;
-};
-
-// ── 로그 타입 ──
-export type Log = {
-  id: string;
-  user_id: string;
-  user_name: string;
-  team: string;
-  channel: "anthropic" | "openai" | "gemini" | "extension" | "crawler";
-  model: string;
-  prompt: string;
-  response: string;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-  latency_ms: number;
-  timestamp: string;
-  mode?: "chat" | "agent";
-  agent_detail?: AgentDetail;
-};
+// (타입 정의는 @/types/ 로 분리됨)
 
 export const MOCK_LOGS: Log[] = [
   // ── 2025-12-01 ──────────────────────────────
@@ -665,24 +593,7 @@ export const MY_LOGS = MOCK_LOGS.filter(l => l.user_id === "u-001");
 // ================================
 // 평가 히스토리 (강지수 기준)
 // ================================
-export type ReportSummary = {
-  id: string;
-  seq: number;           // 1차, 2차, …
-  date: string;          // "2025.10.25"
-  period: string;        // 평가 기간 레이블
-  level: string;         // "Lv.1~2"
-  levelLabel: string;    // "Reviewer"
-  levelColor: string;    // tailwind bg class
-  project: string;
-  aiTaskCount: number;
-  totalTokens: number;
-  totalCostUsd: number;
-  topGain: string;       // 가장 많이 성장한 역량
-  bottleneck: string;    // 주요 병목
-  keyInsight: string;    // 한줄 인사이트
-  radarScores: { axis: string; score: number }[];  // 5점 만점
-  hasDetail: boolean;    // 상세 리포트 페이지가 있는지
-};
+// (ReportSummary 타입은 @/types/report.ts 로 분리됨)
 
 export const PAST_REPORTS: ReportSummary[] = [
   {
@@ -1007,26 +918,7 @@ export const ADMIN_STATS = {
 // ================================
 // 공유 파일 메타데이터
 // ================================
-export type FileType = "PDF" | "XLSX" | "PPTX" | "DOCX" | "CSV";
-export type FileStatus = "공유중" | "초안" | "만료";
-
-export type SharedFile = {
-  id: string;
-  title: string;
-  fileType: FileType;
-  sizeMb: number;
-  creator: string;       // user_name
-  creatorTeam: string;
-  sharedTo: string;      // "전체" | "개발팀" | "디자인팀" | "기획팀" | 특정인
-  status: FileStatus;
-  tags: string[];
-  createdAt: string;     // ISO
-  sharedAt: string;      // ISO
-  updatedAt: string;     // ISO
-  viewCount: number;
-  downloadCount: number;
-  commentCount: number;
-};
+// (FileType, FileStatus, SharedFile 타입은 @/types/file.ts 로 분리됨)
 
 export const SHARED_FILES: SharedFile[] = [
   // ── AI 성숙도 리포트 (PDF) ──
@@ -1479,32 +1371,10 @@ export const TEAM_MATURITY = {
 };
 
 // ================================
-// 인맥 맵 데이터
+// 인맥 맵 데이터 (프로덕션에서 제거 예정)
 // ================================
-export type PersonNode = {
-  id: string;
-  name: string;
-  role: string;
-  team: string;
-  teamColor: string;
-  email: string;
-  aimiLevel: number;
-  aimiScore: number;
-  aimiLabel: string;
-  skills: string[];
-  joinDate: string;
-  bio: string;
-};
 
-export type RelationEdge = {
-  id: string;
-  source: string;
-  target: string;
-  type: "협업" | "멘토링" | "보고" | "프로젝트";
-  label?: string;
-};
-
-export const PEOPLE_NODES: PersonNode[] = [
+export const PEOPLE_NODES = [
   {
     id: "u-001", name: "강지수", role: "Frontend Engineer", team: "개발팀", teamColor: "#1722E8",
     email: "jisoo@softsquared.com", aimiLevel: 3, aimiScore: 42.1, aimiLabel: "Architect",
@@ -1555,17 +1425,9 @@ export const PEOPLE_NODES: PersonNode[] = [
   },
 ];
 
-export type AiCollabEdge = {
-  id: string;
-  source: string;
-  target: string;
-  aiType: "공동작업" | "AI 멘토링" | "리뷰" | "프롬프트 공유";
-  tool: string;
-  sessions: number;
-  topic: string;
-};
+// (AiCollabEdge 타입 제거됨 — 인맥맵 기능 삭제)
 
-export const AI_COLLAB_EDGES: AiCollabEdge[] = [
+export const AI_COLLAB_EDGES = [
   { id: "ai-01", source: "u-005", target: "u-001", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 8,  topic: "기술 리뷰" },
   { id: "ai-02", source: "u-005", target: "u-002", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 6,  topic: "아키텍처 설계" },
   { id: "ai-03", source: "u-005", target: "u-007", aiType: "리뷰",         tool: "claude-sonnet-4", sessions: 4,  topic: "인프라 리뷰" },
@@ -1581,7 +1443,7 @@ export const AI_COLLAB_EDGES: AiCollabEdge[] = [
   { id: "ai-13", source: "u-005", target: "u-004", aiType: "공동작업",     tool: "claude-sonnet-4", sessions: 5,  topic: "로드맵 AI 검토" },
 ];
 
-export const RELATION_EDGES: RelationEdge[] = [
+export const RELATION_EDGES = [
   { id: "e-01", source: "u-005", target: "u-001", type: "멘토링", label: "기술 멘토링" },
   { id: "e-02", source: "u-005", target: "u-002", type: "멘토링", label: "아키텍처 리뷰" },
   { id: "e-03", source: "u-005", target: "u-007", type: "보고", label: "인프라 보고" },

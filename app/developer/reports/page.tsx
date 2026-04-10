@@ -7,7 +7,8 @@ import {
   AlertTriangle, CheckCircle2, BarChart3, Clock, FileText,
   Lock,
 } from "lucide-react";
-import { PAST_REPORTS, ReportSummary } from "@/lib/mockData";
+import type { ReportSummary } from "@/types";
+import { PAST_REPORTS } from "@/lib/mockData";
 import clsx from "clsx";
 
 const LEVEL_BORDER: Record<string, string> = {
