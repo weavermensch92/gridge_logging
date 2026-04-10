@@ -11,21 +11,67 @@ export type { ReportSummary } from "@/types";
 export type { SharedFile, FileType, FileStatus } from "@/types";
 
 // ================================
-// 조직 / 팀 / 유저
+// 조직 → 팀 → 유저 계층 구조
 // ================================
-export const MOCK_ORG = {
+import type { Organization, Team, User } from "@/types";
+
+export const MOCK_ORG: Organization = {
   id: "org-001",
   name: "Softsquared Inc.",
+  ai_budget_usd: 500,
+  billing_cycle: "monthly",
+  created_at: "2025-01-01T00:00:00Z",
 };
 
-export const MOCK_TEAMS = ["개발팀", "디자인팀", "기획팀"];
+export const MOCK_TEAMS: Team[] = [
+  { id: "team-001", org_id: "org-001", name: "개발팀", member_count: 3 },
+  { id: "team-002", org_id: "org-001", name: "디자인팀", member_count: 1 },
+  { id: "team-003", org_id: "org-001", name: "기획팀", member_count: 1 },
+];
 
-export const MOCK_USERS = [
-  { id: "u-001", name: "강지수", team: "개발팀", role: "member", email: "jisoo@softsquared.com" },
-  { id: "u-002", name: "이민준", team: "개발팀", role: "member", email: "minjun@softsquared.com" },
-  { id: "u-003", name: "박서연", team: "디자인팀", role: "member", email: "seoyeon@softsquared.com" },
-  { id: "u-004", name: "최현우", team: "기획팀", role: "member", email: "hyunwoo@softsquared.com" },
-  { id: "u-005", name: "김태영", team: "개발팀", role: "admin", email: "taeyoung@softsquared.com" },
+export const MOCK_USERS: User[] = [
+  {
+    id: "u-000", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "관리자", email: "admin@softsquared.com", role: "super_admin",
+    status: "active", ai_enabled: true, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
+    onboarding_step: "complete", created_at: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "u-001", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "강지수", email: "jisoo@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["claude_code", "claude_web"], ai_quota_usd: 50, ai_used_usd: 32.4,
+    onboarding_step: "complete", created_at: "2025-06-01T00:00:00Z",
+  },
+  {
+    id: "u-002", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "이민준", email: "minjun@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "cursor"], ai_quota_usd: 50, ai_used_usd: 28.1,
+    onboarding_step: "complete", created_at: "2025-06-15T00:00:00Z",
+  },
+  {
+    id: "u-003", org_id: "org-001", team_id: "team-002", team_name: "디자인팀",
+    name: "박서연", email: "seoyeon@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "gemini_web"], ai_quota_usd: 30, ai_used_usd: 14.8,
+    onboarding_step: "complete", created_at: "2025-07-01T00:00:00Z",
+  },
+  {
+    id: "u-004", org_id: "org-001", team_id: "team-003", team_name: "기획팀",
+    name: "최현우", email: "hyunwoo@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "claude_web"], ai_quota_usd: 30, ai_used_usd: 15.1,
+    onboarding_step: "complete", created_at: "2025-07-15T00:00:00Z",
+  },
+  {
+    id: "u-005", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "김태영", email: "taeyoung@softsquared.com", role: "admin",
+    status: "active", ai_enabled: true, ai_tools: ["claude_code", "chatgpt"], ai_quota_usd: 80, ai_used_usd: 45.2,
+    onboarding_step: "complete", created_at: "2025-03-01T00:00:00Z",
+  },
+  {
+    id: "u-006", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "신입사원", email: "newbie@softsquared.com", role: "member",
+    status: "invited", ai_enabled: false, ai_tools: ["claude_code"], ai_quota_usd: 50, ai_used_usd: 0,
+    onboarding_step: "password_change", created_at: "2025-12-10T00:00:00Z",
+  },
 ];
 
 // ================================

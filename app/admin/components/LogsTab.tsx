@@ -500,7 +500,7 @@ export default function LogsTab() {
           <span className="text-sm font-medium text-gray-600">필터</span>
         </div>
         <div className="flex gap-2">
-          {["전체", ...MOCK_TEAMS].map(t => (
+          {["전체", ...MOCK_TEAMS.map(t => t.name)].map(t => (
             <button key={t} onClick={() => setTeamFilter(t)}
               className={clsx("text-xs px-3 py-1.5 rounded-full font-medium transition-colors",
                 teamFilter === t ? "text-white" : "bg-white/60 text-gray-500 hover:bg-white/80")}

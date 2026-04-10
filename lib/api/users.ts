@@ -12,7 +12,7 @@ type UsersListResponse = {
 type CreateUserPayload = {
   name: string;
   email: string;
-  team: string;
+  team_id: string;
   role: UserRole;
   ai_tools: AiToolType[];
   temp_password: string;
@@ -21,26 +21,18 @@ type CreateUserPayload = {
 type UpdateUserPayload = Partial<{
   role: UserRole;
   ai_enabled: boolean;
-  team: string;
+  team_id: string;
   ai_tools: AiToolType[];
   ai_quota_usd: number;
 }>;
 
-const mockUsers: User[] = MOCK_USERS.map(u => ({
-  ...u,
-  role: u.role as UserRole,
-  ai_enabled: true,
-  ai_quota_usd: 50,
-  ai_used_usd: Math.round(Math.random() * 40 * 100) / 100,
-  ai_tools: ["claude_code" as AiToolType, "cursor" as AiToolType],
-  status: "active" as const,
-}));
+const mockUsers: User[] = [...MOCK_USERS];
 
 export const usersApi = {
-  async list(params?: { team?: string; status?: string; page?: number; limit?: number }) {
+  async list(params?: { team_id?: string; status?: string; page?: number; limit?: number }) {
     if (isMockMode()) {
       let filtered = [...mockUsers];
-      if (params?.team) filtered = filtered.filter(u => u.team === params.team);
+      if (params?.team_id) filtered = filtered.filter(u => u.team_id === params.team_id);
       if (params?.status) filtered = filtered.filter(u => u.status === params.status);
       return {
         data: {
@@ -52,7 +44,7 @@ export const usersApi = {
       };
     }
     const query = new URLSearchParams();
-    if (params?.team) query.set("team", params.team);
+    if (params?.team_id) query.set("team_id", params.team_id);
     if (params?.status) query.set("status", params.status);
     if (params?.page) query.set("page", String(params.page));
     if (params?.limit) query.set("limit", String(params.limit));
@@ -63,15 +55,19 @@ export const usersApi = {
     if (isMockMode()) {
       const newUser: User = {
         id: `u-${String(mockUsers.length + 1).padStart(3, "0")}`,
+        org_id: "org-001",
+        team_id: payload.team_id,
+        team_name: "",
         name: payload.name,
         email: payload.email,
-        team: payload.team,
         role: payload.role,
-        ai_enabled: true,
+        status: "invited",
+        ai_enabled: false,
+        ai_tools: payload.ai_tools,
         ai_quota_usd: 50,
         ai_used_usd: 0,
-        ai_tools: payload.ai_tools,
-        status: "invited",
+        onboarding_step: "password_change",
+        created_at: new Date().toISOString(),
       };
       mockUsers.push(newUser);
       return { data: newUser };

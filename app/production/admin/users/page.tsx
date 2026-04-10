@@ -8,8 +8,8 @@ import {
   Loader2, UserPlus, Shield, Edit3, Trash2,
 } from "lucide-react";
 import clsx from "clsx";
-import type { User, UserRole, AiToolType } from "@/types";
-import { usersApi } from "@/lib/api";
+import type { User, UserRole, AiToolType, Team } from "@/types";
+import { usersApi, teamsApi } from "@/lib/api";
 
 const ROLE_LABEL: Record<UserRole, { label: string; color: string }> = {
   super_admin: { label: "Super Admin", color: "bg-purple-100 text-purple-700" },
@@ -20,7 +20,13 @@ const ROLE_LABEL: Record<UserRole, { label: string; color: string }> = {
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   active:    { label: "활성",  color: "bg-emerald-100 text-emerald-700" },
   suspended: { label: "정지",  color: "bg-red-100 text-red-600" },
-  invited:   { label: "초대됨", color: "bg-amber-100 text-amber-700" },
+  invited:   { label: "온보딩 중", color: "bg-amber-100 text-amber-700" },
+};
+
+const ONBOARDING_LABEL: Record<string, string> = {
+  password_change: "비밀번호 변경 대기",
+  tool_install: "도구 설치 중",
+  complete: "",
 };
 
 const AI_TOOL_LABEL: Record<AiToolType, string> = {
@@ -32,25 +38,34 @@ const AI_TOOL_LABEL: Record<AiToolType, string> = {
 };
 
 const ALL_AI_TOOLS: AiToolType[] = ["chatgpt", "claude_web", "gemini_web", "claude_code", "cursor"];
-const ALL_TEAMS = ["개발팀", "디자인팀", "기획팀"];
 
 export default function UsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("전체");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
 
+  const fetchTeams = useCallback(async () => {
+    const res = await teamsApi.list();
+    if (res.data) setTeams(res.data.teams);
+  }, []);
+
+  useEffect(() => { fetchTeams(); }, [fetchTeams]);
+
+  const selectedTeamId = teams.find(t => t.name === teamFilter)?.id;
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     const res = await usersApi.list(
-      teamFilter !== "전체" ? { team: teamFilter } : undefined,
+      selectedTeamId ? { team_id: selectedTeamId } : undefined,
     );
     if (res.data) setUsers(res.data.users);
     setLoading(false);
-  }, [teamFilter]);
+  }, [selectedTeamId]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -60,6 +75,8 @@ export default function UsersPage() {
         u.email.includes(search.toLowerCase())
       )
     : users;
+
+  const teamNames = teams.map(t => t.name);
 
   const toggleAi = async (user: User) => {
     await usersApi.update(user.id, { ai_enabled: !user.ai_enabled });
@@ -105,7 +122,7 @@ export default function UsersPage() {
             <span className="text-sm font-medium text-gray-600">필터</span>
           </div>
           <div className="flex gap-2">
-            {["전체", ...ALL_TEAMS].map(t => (
+            {["전체", ...teamNames].map(t => (
               <button key={t} onClick={() => setTeamFilter(t)}
                 className={clsx("text-xs px-3 py-1.5 rounded-full font-medium transition-colors",
                   teamFilter === t ? "text-white" : "bg-white/60 text-gray-500 hover:bg-white/80")}
@@ -137,7 +154,7 @@ export default function UsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/50 bg-white/20">
-                    {["이름", "이메일", "팀", "역할", "AI 권한", "AI 도구", "한도 / 사용", "상태", ""].map(h => (
+                    {["이름", "이메일", "팀", "역할", "AI 권한", "AI 도구", "한도 / 사용", "상태", "온보딩", ""].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>
@@ -147,7 +164,7 @@ export default function UsersPage() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-16 text-center text-sm text-gray-400">
+                      <td colSpan={10} className="px-4 py-16 text-center text-sm text-gray-400">
                         유저가 없습니다.
                       </td>
                     </tr>
@@ -167,7 +184,7 @@ export default function UsersPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500">{user.email}</td>
-                          <td className="px-4 py-3 text-xs text-gray-600">{user.team}</td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{user.team_name}</td>
                           <td className="px-4 py-3">
                             <span className={clsx("text-[10px] font-semibold px-2 py-0.5 rounded-full", role.color)}>
                               {role.label}
@@ -199,6 +216,13 @@ export default function UsersPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
+                            {user.onboarding_step !== "complete" && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">
+                                {ONBOARDING_LABEL[user.onboarding_step]}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
                               <button onClick={() => setEditUser(user)}
                                 className="p-1.5 rounded-lg hover:bg-white/60 text-gray-400 hover:text-gray-600 transition-colors">
@@ -225,19 +249,27 @@ export default function UsersPage() {
       </div>
 
       {showAddModal && (
-        <AddUserModal onClose={() => setShowAddModal(false)} onSuccess={fetchUsers} />
+        <AddUserModal teams={teams} onClose={() => setShowAddModal(false)} onSuccess={fetchUsers} />
       )}
       {editUser && (
-        <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSuccess={fetchUsers} />
+        <EditUserModal user={editUser} teams={teams} onClose={() => setEditUser(null)} onSuccess={fetchUsers} />
       )}
     </main>
   );
 }
 
-function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+const TOOL_INSTALL_GUIDE: Record<AiToolType, { method: string; desc: string }> = {
+  chatgpt:     { method: "공유 계정", desc: "그릿지 제공 공유 계정이 자동 할당됩니다." },
+  claude_web:  { method: "Chrome Extension", desc: "Chrome Extension을 설치해야 합니다." },
+  gemini_web:  { method: "Chrome Extension", desc: "Chrome Extension을 설치해야 합니다." },
+  claude_code: { method: "로컬 프록시", desc: "로컬 인터셉트 서비스를 설치해야 합니다." },
+  cursor:      { method: "로컬 프록시", desc: "로컬 인터셉트 서비스를 설치해야 합니다." },
+};
+
+function AddUserModal({ teams, onClose, onSuccess }: { teams: Team[]; onClose: () => void; onSuccess: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [team, setTeam] = useState(ALL_TEAMS[0]);
+  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [role, setRole] = useState<UserRole>("member");
   const [tools, setTools] = useState<Set<AiToolType>>(new Set());
   const [tempPassword, setTempPassword] = useState("");
@@ -255,7 +287,7 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     e.preventDefault();
     setSubmitting(true);
     await usersApi.create({
-      name, email, team, role,
+      name, email, team_id: teamId, role,
       ai_tools: Array.from(tools),
       temp_password: tempPassword,
     });
@@ -289,10 +321,10 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">팀</label>
-              <select value={team} onChange={e => setTeam(e.target.value)}
+              <label className="block text-xs font-medium text-gray-500 mb-1">팀 배정</label>
+              <select value={teamId} onChange={e => setTeamId(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200">
-                {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>
@@ -317,12 +349,31 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               ))}
             </div>
           </div>
+          {/* 온보딩 설치 안내 (선택된 도구 기준) */}
+          {tools.size > 0 && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+              <p className="text-xs font-semibold text-blue-700 mb-2">온보딩 시 설치 안내 (유저에게 자동 표시)</p>
+              <div className="space-y-1.5">
+                {Array.from(tools).map(t => {
+                  const guide = TOOL_INSTALL_GUIDE[t];
+                  return (
+                    <div key={t} className="flex items-center gap-2 text-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-medium">{AI_TOOL_LABEL[t]}</span>
+                      <span className="text-gray-500">{guide.method}</span>
+                      <span className="text-gray-400">— {guide.desc}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">임시 비밀번호</label>
             <input type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} required
               placeholder="관리자가 직접 전달"
               className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-200" />
-            <p className="text-[10px] text-gray-400 mt-1">첫 로그인 시 비밀번호 변경이 강제됩니다.</p>
+            <p className="text-[10px] text-gray-400 mt-1">첫 로그인 시 비밀번호 변경 → AI 도구 설치 안내 → 온보딩 완료</p>
           </div>
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose}
@@ -340,9 +391,9 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   );
 }
 
-function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () => void; onSuccess: () => void }) {
+function EditUserModal({ user, teams, onClose, onSuccess }: { user: User; teams: Team[]; onClose: () => void; onSuccess: () => void }) {
   const [role, setRole] = useState<UserRole>(user.role ?? "member");
-  const [team, setTeam] = useState(user.team);
+  const [teamId, setTeamId] = useState(user.team_id);
   const [tools, setTools] = useState<Set<AiToolType>>(new Set(user.ai_tools ?? []));
   const [quota, setQuota] = useState(String(user.ai_quota_usd ?? 50));
   const [submitting, setSubmitting] = useState(false);
@@ -359,7 +410,7 @@ function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () =
     e.preventDefault();
     setSubmitting(true);
     await usersApi.update(user.id, {
-      role, team,
+      role, team_id: teamId,
       ai_tools: Array.from(tools),
       ai_quota_usd: Number(quota),
     });
@@ -382,9 +433,9 @@ function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () =
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">팀</label>
-              <select value={team} onChange={e => setTeam(e.target.value)}
+              <select value={teamId} onChange={e => setTeamId(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200">
-                {ALL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>

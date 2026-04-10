@@ -32,6 +32,42 @@
 
 ---
 
+## 조직 계층 구조 & 역할
+
+### 계층: 기업(Organization) → 팀(Team) → 멤버(User)
+
+```
+Organization (기업 그룹)
+├── Team A (팀)
+│   ├── User 1 (member)
+│   ├── User 2 (member)
+│   └── User 3 (admin) ← 팀/유저 관리 권한
+├── Team B (팀)
+│   └── User 4 (member)
+└── super_admin ← 기업 전체 관리, 팀 생성/삭제, 예산 총괄
+```
+
+### 역할 정의
+
+| 역할 | 범위 | 권한 |
+|------|------|------|
+| `super_admin` | **기업 전체** | 조직 설정, 팀 생성/삭제, AI 예산 총괄, 관리자 지정, 감사 로그 열람 |
+| `admin` | **소속 팀** | 유저 추가/삭제, AI 권한 부여/회수, 팀 로그 열람, 보안 규칙 관리 |
+| `member` | **본인** | 본인 로그 열람, 코칭 리포트 확인, 한도 연장 요청 |
+
+### 멤버 온보딩 플로우 (신규 가입 시)
+
+1. **관리자(admin)가 유저를 팀에 추가** → 이름, 이메일, 팀, AI 도구 선택
+2. **임시 비밀번호 발급** (관리자가 직접 전달, SMTP 불필요)
+3. **첫 로그인** → `onboarding_step: "password_change"` → 비밀번호 변경 강제
+4. **도구 설치 안내** → `onboarding_step: "tool_install"` → 선택한 AI 도구별 설치 가이드:
+   - ChatGPT → 그릿지 공유 계정 할당 안내
+   - Claude/Gemini 웹 → Chrome Extension 설치 안내
+   - Claude Code/Cursor → 로컬 프록시 인터셉터 설치 안내
+5. **온보딩 완료** → `onboarding_step: "complete"` → AI 사용 활성화
+
+---
+
 ## 개발 환경 & 브랜치 전략
 
 - **개발 브랜치**: `claude/frontend-production-planning-YH9l8` (main에 직접 머지 X)

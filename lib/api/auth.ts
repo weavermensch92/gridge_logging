@@ -10,15 +10,19 @@ type MeResponse = User;
 
 const MOCK_ADMIN: User = {
   id: "u-005",
+  org_id: "org-001",
+  team_id: "team-001",
+  team_name: "개발팀",
   name: "김태영",
   email: "taeyoung@softsquared.com",
   role: "admin",
-  team: "개발팀",
-  ai_enabled: true,
-  ai_quota_usd: 100,
-  ai_used_usd: 42.5,
-  ai_tools: ["claude_code", "cursor"],
   status: "active",
+  ai_enabled: true,
+  ai_tools: ["claude_code", "chatgpt"],
+  ai_quota_usd: 80,
+  ai_used_usd: 45.2,
+  onboarding_step: "complete",
+  created_at: "2025-03-01T00:00:00Z",
 };
 
 export const authApi = {
