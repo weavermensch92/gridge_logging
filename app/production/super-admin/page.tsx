@@ -2,12 +2,24 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Activity, Building2, Plus, X, Users, DollarSign,
+  Activity, Building2, Plus, X, Users, Cpu,
   Loader2, UserCheck, Trash2, ChevronRight,
+  FileText, Database,
 } from "lucide-react";
-import clsx from "clsx";
 import type { Organization } from "@/types";
 import { orgApi } from "@/lib/api";
+
+/** 그릿지 플랫폼 운영 비용 (로그 수집/분석용) */
+const MOCK_PLATFORM_COST = {
+  total_usd: 87.4,
+  breakdown: [
+    { label: "코칭 리포트 생성 (LLM)", usd: 52.1 },
+    { label: "보안 스캔 분석", usd: 18.6 },
+    { label: "로그 수집/저장", usd: 16.7 },
+  ],
+  total_logs_processed: 12_840,
+  this_month_reports: 23,
+};
 
 export default function SuperAdminPage() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -31,8 +43,7 @@ export default function SuperAdminPage() {
   };
 
   const totalUsers = orgs.reduce((s, o) => s + (o.user_count ?? 0), 0);
-  const totalBudget = orgs.reduce((s, o) => s + o.ai_budget_usd, 0);
-  const totalUsed = orgs.reduce((s, o) => s + (o.total_used_usd ?? 0), 0);
+  const platform = MOCK_PLATFORM_COST;
 
   return (
     <main className="min-h-screen p-6" style={{ background: "var(--bg-base)" }}>
@@ -50,7 +61,7 @@ export default function SuperAdminPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Gridge 플랫폼 관리</h1>
-              <p className="text-sm text-gray-500">기업 생성 · Admin 지정 · 전체 현황</p>
+              <p className="text-sm text-gray-500">기업 생성 · Admin 지정 · 운영 현황</p>
             </div>
           </div>
           <button onClick={() => setShowAddModal(true)}
@@ -60,8 +71,8 @@ export default function SuperAdminPage() {
           </button>
         </div>
 
-        {/* 요약 카드 */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        {/* 플랫폼 운영 현황 카드 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="glass rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
               <Building2 className="w-4 h-4 text-gray-400" />
@@ -78,10 +89,46 @@ export default function SuperAdminPage() {
           </div>
           <div className="glass rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-gray-400" />
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">전체 AI 비용</span>
+              <Cpu className="w-4 h-4 text-gray-400" />
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">그릿지 운영 비용</span>
             </div>
-            <p className="text-3xl font-black text-gray-900">${totalUsed.toFixed(0)}<span className="text-sm font-normal text-gray-400 ml-1">/ ${totalBudget}</span></p>
+            <p className="text-3xl font-black text-gray-900">${platform.total_usd}<span className="text-sm font-normal text-gray-400 ml-1">이번달</span></p>
+          </div>
+          <div className="glass rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="w-4 h-4 text-gray-400" />
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">처리된 로그</span>
+            </div>
+            <p className="text-3xl font-black text-gray-900">{platform.total_logs_processed.toLocaleString()}<span className="text-sm font-normal text-gray-400 ml-1">건</span></p>
+          </div>
+        </div>
+
+        {/* 그릿지 운영 비용 상세 */}
+        <div className="glass rounded-2xl p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Cpu className="w-4 h-4" style={{ color: "var(--accent)" }} />
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">운영 비용 내역 (로그 수집 · 분석 · 코칭)</h2>
+          </div>
+          <div className="space-y-3">
+            {platform.breakdown.map((item, i) => {
+              const pct = (item.usd / platform.total_usd) * 100;
+              return (
+                <div key={i}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600 font-medium">{item.label}</span>
+                    <span className="text-gray-500">${item.usd.toFixed(1)} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--accent)" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 border-t border-white/50 flex items-center gap-4 text-xs text-gray-400">
+            <span>코칭 리포트 생성 {platform.this_month_reports}건</span>
+            <span>·</span>
+            <span>로그 처리 {platform.total_logs_processed.toLocaleString()}건</span>
           </div>
         </div>
 
@@ -91,10 +138,10 @@ export default function SuperAdminPage() {
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {orgs.map(org => {
-              const usedPct = org.ai_budget_usd > 0 ? ((org.total_used_usd ?? 0) / org.ai_budget_usd) * 100 : 0;
-              return (
+          <>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">등록 기업 목록</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {orgs.map(org => (
                 <div key={org.id} className="glass rounded-2xl p-6 hover:shadow-lg transition-shadow group">
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -126,8 +173,8 @@ export default function SuperAdminPage() {
                     )}
                   </div>
 
-                  {/* 통계 */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
+                  {/* 기업 규모 */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="text-center p-2 rounded-lg bg-white/40">
                       <p className="text-lg font-bold text-gray-800">{org.user_count ?? 0}</p>
                       <p className="text-[10px] text-gray-400">유저</p>
@@ -136,45 +183,32 @@ export default function SuperAdminPage() {
                       <p className="text-lg font-bold text-gray-800">{org.team_count ?? 0}</p>
                       <p className="text-[10px] text-gray-400">팀</p>
                     </div>
-                  </div>
-
-                  {/* 예산 바 */}
-                  <div className="mb-2">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-500">AI 예산</span>
-                      <span className="text-gray-600 font-medium">${(org.total_used_usd ?? 0).toFixed(0)} / ${org.ai_budget_usd}</span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${Math.min(usedPct, 100)}%`,
-                          background: usedPct > 80 ? "#ef4444" : "var(--accent)",
-                        }} />
+                    <div className="text-center p-2 rounded-lg bg-white/40">
+                      <p className="text-lg font-bold text-gray-800">
+                        <FileText className="w-4 h-4 inline text-gray-400" />
+                      </p>
+                      <p className="text-[10px] text-gray-400">{org.billing_cycle === "monthly" ? "월간" : "분기"}</p>
                     </div>
                   </div>
 
-                  {/* 상세 보기 */}
-                  <button className="w-full mt-3 flex items-center justify-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 py-2 rounded-lg hover:bg-white/40 transition-colors">
+                  <button className="w-full mt-2 flex items-center justify-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 py-2 rounded-lg hover:bg-white/40 transition-colors">
                     상세 보기 <ChevronRight className="w-3 h-3" />
                   </button>
                 </div>
-              );
-            })}
+              ))}
 
-            {/* 기업 추가 카드 */}
-            <button onClick={() => setShowAddModal(true)}
-              className="glass rounded-2xl p-6 border-2 border-dashed border-gray-200 hover:border-gray-300 flex flex-col items-center justify-center gap-3 text-gray-400 hover:text-gray-600 transition-colors min-h-[280px]">
-              <Plus className="w-8 h-8" />
-              <span className="text-sm font-medium">새 기업 추가</span>
-            </button>
-          </div>
+              {/* 기업 추가 카드 */}
+              <button onClick={() => setShowAddModal(true)}
+                className="glass rounded-2xl p-6 border-2 border-dashed border-gray-200 hover:border-gray-300 flex flex-col items-center justify-center gap-3 text-gray-400 hover:text-gray-600 transition-colors min-h-[260px]">
+                <Plus className="w-8 h-8" />
+                <span className="text-sm font-medium">새 기업 추가</span>
+              </button>
+            </div>
+          </>
         )}
       </div>
 
-      {/* 기업 추가 모달 */}
       {showAddModal && <AddOrgModal onClose={() => setShowAddModal(false)} onSuccess={fetchOrgs} />}
-
-      {/* Admin 지정 모달 */}
       {assignOrg && <AssignAdminModal org={assignOrg} onClose={() => setAssignOrg(null)} onSuccess={fetchOrgs} />}
     </main>
   );
@@ -214,7 +248,7 @@ function AddOrgModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">월 AI 예산 (USD)</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">고객 AI 예산 (USD)</label>
               <input type="number" value={budget} onChange={e => setBudget(e.target.value)} min="0" step="100"
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200" />
             </div>
