@@ -24,6 +24,10 @@ export default function LoginPage() {
     if (result.success) {
       if (result.mustChangePassword) {
         router.push("/production/login/change-password");
+      } else if (result.role === "super_admin") {
+        router.push("/production/super-admin");
+      } else if (result.role === "member") {
+        router.push("/production/developer");
       } else {
         router.push("/production/admin");
       }

@@ -34,26 +34,36 @@
 
 ## 조직 계층 구조 & 역할
 
-### 계층: 기업(Organization) → 팀(Team) → 멤버(User)
+### 계층: Super Admin → Organization → Team → Member
 
 ```
-Organization (기업 그룹)
-├── Team A (팀)
-│   ├── User 1 (member)
-│   ├── User 2 (member)
-│   └── User 3 (admin) ← 팀/유저 관리 권한
-├── Team B (팀)
-│   └── User 4 (member)
-└── super_admin ← 기업 전체 관리, 팀 생성/삭제, 예산 총괄
+Super Admin (그릿지 플랫폼 관리자)
+└── Organization (기업) ← super_admin이 생성/삭제
+    └── Admin (기업 관리자) ← super_admin이 지정
+        ├── Team A (팀) ← admin이 생성/삭제
+        │   ├── Member 1
+        │   └── Member 2
+        └── Team B (팀)
+            └── Member 3
 ```
 
 ### 역할 정의
 
 | 역할 | 범위 | 권한 |
 |------|------|------|
-| `super_admin` | **기업 전체** | 조직 설정, 팀 생성/삭제, AI 예산 총괄, 관리자 지정, 감사 로그 열람 |
-| `admin` | **소속 팀** | 유저 추가/삭제, AI 권한 부여/회수, 팀 로그 열람, 보안 규칙 관리 |
+| `super_admin` | **플랫폼 전체** | 기업(Organization) 생성/삭제, 기업별 admin 지정, 전체 현황 |
+| `admin` | **소속 기업** | 팀 생성/삭제, 유저 추가/관리, AI 예산 설정, 보안 규칙 관리 |
 | `member` | **본인** | 본인 로그 열람, 코칭 리포트 확인, 한도 연장 요청 |
+
+### 프로덕션 라우트 (역할별)
+
+| URL | 역할 | 내용 |
+|-----|------|------|
+| `/production/super-admin` | super_admin | 기업 목록, 기업 추가/삭제, admin 지정 |
+| `/production/admin` | admin | 기업 대시보드 (통계+팀관리+로그+한도요청) |
+| `/production/admin/users` | admin | 유저 관리 CRUD |
+| `/production/admin/settings` | admin | AI 비용/예산 관리 |
+| `/production/login` | 전체 | 로그인 → 역할별 자동 리다이렉트 |
 
 ### 멤버 온보딩 플로우 (신규 가입 시)
 

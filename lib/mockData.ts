@@ -11,29 +11,42 @@ export type { ReportSummary } from "@/types";
 export type { SharedFile, FileType, FileStatus } from "@/types";
 
 // ================================
-// 조직 → 팀 → 유저 계층 구조
+// Super Admin → Organization → Team → User 계층 구조
 // ================================
 import type { Organization, Team, User } from "@/types";
 
-export const MOCK_ORG: Organization = {
-  id: "org-001",
-  name: "Softsquared Inc.",
-  ai_budget_usd: 500,
-  billing_cycle: "monthly",
-  created_at: "2025-01-01T00:00:00Z",
-};
+/** super_admin이 관리하는 기업 목록 */
+export const MOCK_ORGS: Organization[] = [
+  {
+    id: "org-001", name: "Softsquared Inc.",
+    ai_budget_usd: 1000, billing_cycle: "monthly",
+    admin_id: "u-005", admin_name: "김태영",
+    user_count: 6, team_count: 3, total_used_usd: 342.5,
+    created_at: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "org-002", name: "ABC Corporation",
+    ai_budget_usd: 500, billing_cycle: "monthly",
+    admin_id: undefined, admin_name: undefined,
+    user_count: 0, team_count: 0, total_used_usd: 0,
+    created_at: "2025-09-01T00:00:00Z",
+  },
+];
+
+/** 하위 호환용 단일 기업 참조 */
+export const MOCK_ORG = MOCK_ORGS[0];
 
 export const MOCK_TEAMS: Team[] = [
-  { id: "team-001", org_id: "org-001", name: "개발팀", member_count: 3 },
-  { id: "team-002", org_id: "org-001", name: "디자인팀", member_count: 1 },
-  { id: "team-003", org_id: "org-001", name: "기획팀", member_count: 1 },
+  { id: "team-001", org_id: "org-001", name: "개발팀", member_count: 3, used_usd: 210.3 },
+  { id: "team-002", org_id: "org-001", name: "디자인팀", member_count: 1, used_usd: 78.2 },
+  { id: "team-003", org_id: "org-001", name: "기획팀", member_count: 1, used_usd: 54.0 },
 ];
 
 export const MOCK_USERS: User[] = [
   {
-    id: "u-000", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
-    name: "관리자", email: "admin@softsquared.com", role: "super_admin",
-    status: "active", ai_enabled: true, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
+    id: "u-000", // super_admin: 플랫폼 레벨 — org/team 소속 없음
+    name: "플랫폼 관리자", email: "super@gridge.io", role: "super_admin",
+    status: "active", ai_enabled: false, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
     onboarding_step: "complete", created_at: "2025-01-01T00:00:00Z",
   },
   {

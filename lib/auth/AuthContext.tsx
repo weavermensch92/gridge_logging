@@ -7,7 +7,7 @@ import { authApi } from "@/lib/api";
 type AuthState = {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; mustChangePassword?: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; mustChangePassword?: boolean; role?: string; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return {
         success: true,
         mustChangePassword: res.data.user.must_change_password,
+        role: res.data.user.role,
       };
     }
     return { success: false, error: res.error?.message };

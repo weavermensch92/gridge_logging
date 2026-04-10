@@ -16,13 +16,21 @@ export type AiToolSetup = {
   guide_url?: string;
 };
 
-// ── 계층: Organization → Team → User ──
+// ── 계층: Super Admin → Organization → Team → User ──
+// super_admin: 플랫폼 관리자 — 기업(Organization) 생성/삭제, admin 지정
+// admin: 기업 관리자 — 팀(Team) 생성/삭제, 멤버 추가/관리
+// member: 팀원 — 본인 AI 사용, 로그 확인
 
 export type Organization = {
   id: string;
   name: string;
   ai_budget_usd: number;
   billing_cycle: "monthly" | "quarterly";
+  admin_id?: string;             // 기업 관리자 유저 ID (super_admin이 지정)
+  admin_name?: string;           // 조회 편의용
+  user_count?: number;           // 조회 시 집계
+  team_count?: number;           // 조회 시 집계
+  total_used_usd?: number;       // 조회 시 집계
   created_at: string;
 };
 
@@ -32,12 +40,13 @@ export type Team = {
   name: string;
   ai_budget_usd?: number;       // 팀별 예산 (선택)
   member_count?: number;         // 조회 시 집계
+  used_usd?: number;             // 조회 시 집계
 };
 
 export type User = {
   id: string;
-  org_id: string;
-  team_id: string;
+  org_id?: string;               // super_admin은 플랫폼 레벨이므로 null
+  team_id?: string;              // super_admin/admin은 팀 소속 없을 수 있음
   team_name?: string;            // 조회 편의용 (join)
   name: string;
   email: string;

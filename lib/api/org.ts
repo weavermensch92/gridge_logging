@@ -1,4 +1,6 @@
 import { api, isMockMode } from "./client";
+import type { Organization } from "@/types";
+import { MOCK_ORGS } from "@/lib/mockData";
 
 type OrgSettings = {
   id: string;
@@ -50,6 +52,54 @@ const mockQuotaRequests: QuotaRequest[] = [
 ];
 
 export const orgApi = {
+  // ── Super Admin: 기업 CRUD ──
+
+  async listOrgs() {
+    if (isMockMode()) {
+      return { data: { orgs: [...MOCK_ORGS] } };
+    }
+    return api.get<{ orgs: Organization[] }>("/api/orgs");
+  },
+
+  async createOrg(payload: { name: string; ai_budget_usd: number; billing_cycle: "monthly" | "quarterly" }) {
+    if (isMockMode()) {
+      const newOrg: Organization = {
+        id: `org-${Date.now()}`,
+        ...payload,
+        user_count: 0,
+        team_count: 0,
+        total_used_usd: 0,
+        created_at: new Date().toISOString(),
+      };
+      MOCK_ORGS.push(newOrg);
+      return { data: newOrg };
+    }
+    return api.post<Organization>("/api/orgs", payload);
+  },
+
+  async deleteOrg(id: string) {
+    if (isMockMode()) {
+      const idx = MOCK_ORGS.findIndex(o => o.id === id);
+      if (idx >= 0) MOCK_ORGS.splice(idx, 1);
+      return { data: { success: true } };
+    }
+    return api.delete<{ success: boolean }>(`/api/orgs/${id}`);
+  },
+
+  async assignAdmin(orgId: string, payload: { admin_email: string }) {
+    if (isMockMode()) {
+      const org = MOCK_ORGS.find(o => o.id === orgId);
+      if (org) {
+        org.admin_name = payload.admin_email;
+        org.admin_id = "assigned";
+      }
+      return { data: { success: true } };
+    }
+    return api.put<{ success: boolean }>(`/api/orgs/${orgId}/admin`, payload);
+  },
+
+  // ── Admin: 기업 내 설정/비용 ──
+
   async getSettings() {
     if (isMockMode()) {
       return { data: mockSettings };
