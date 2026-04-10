@@ -75,9 +75,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-5xl mx-auto">
-        {/* 헤더 */}
         <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => router.push("/admin")}
+          <button onClick={() => router.push("/production/admin")}
             className="p-2 rounded-xl glass hover:scale-105 transition-transform">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
@@ -93,7 +92,6 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* 예산 개요 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="glass rounded-2xl p-6 col-span-2">
                 <div className="flex items-center justify-between mb-4">
@@ -121,12 +119,10 @@ export default function SettingsPage() {
                     </div>
                   )}
                 </div>
-
                 <div className="flex items-end gap-2 mb-3">
                   <span className="text-4xl font-black text-gray-900">${costSummary?.total_used_usd.toFixed(1)}</span>
                   <span className="text-lg text-gray-400 mb-1">/ ${budget}</span>
                 </div>
-
                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
                   <div className="h-full rounded-full transition-all"
                     style={{
@@ -161,7 +157,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 유저별 비용 */}
             <div className="glass rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Users className="w-4 h-4 text-gray-400" />
@@ -190,10 +185,7 @@ export default function SettingsPage() {
                             <div className="flex items-center gap-2">
                               <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                 <div className="h-full rounded-full"
-                                  style={{
-                                    width: `${Math.min(pct, 100)}%`,
-                                    background: overLimit ? "#ef4444" : "var(--accent)",
-                                  }} />
+                                  style={{ width: `${Math.min(pct, 100)}%`, background: overLimit ? "#ef4444" : "var(--accent)" }} />
                               </div>
                               <span className={clsx("text-xs font-medium", overLimit ? "text-red-500" : "text-gray-500")}>
                                 {pct.toFixed(0)}%
@@ -201,9 +193,7 @@ export default function SettingsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            {overLimit && (
-                              <AlertTriangle className="w-4 h-4 text-red-400" />
-                            )}
+                            {overLimit && <AlertTriangle className="w-4 h-4 text-red-400" />}
                           </td>
                         </tr>
                       );
@@ -213,7 +203,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 한도 연장 요청 */}
             <div className="glass rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <DollarSign className="w-4 h-4 text-gray-400" />
@@ -224,7 +213,6 @@ export default function SettingsPage() {
                   </span>
                 )}
               </div>
-
               {quotaRequests.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-8">한도 연장 요청이 없습니다.</p>
               ) : (
@@ -252,21 +240,15 @@ export default function SettingsPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-gray-700">+${req.requested_amount}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {new Date(req.created_at).toLocaleDateString("ko-KR")}
-                        </p>
+                        <p className="text-[10px] text-gray-400">{new Date(req.created_at).toLocaleDateString("ko-KR")}</p>
                       </div>
                       {req.status === "pending" && (
                         <div className="flex flex-col gap-1">
                           <button onClick={() => handleQuotaAction(req.id, "approved")}
                             className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90"
-                            style={{ background: "var(--accent)" }}>
-                            승인
-                          </button>
+                            style={{ background: "var(--accent)" }}>승인</button>
                           <button onClick={() => handleQuotaAction(req.id, "rejected")}
-                            className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200">
-                            거절
-                          </button>
+                            className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200">거절</button>
                         </div>
                       )}
                     </div>

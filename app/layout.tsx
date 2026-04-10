@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/lib/auth/AuthContext";
 
 export const metadata: Metadata = {
   title: "Gridge AI Monitoring",
@@ -15,9 +14,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="antialiased">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        {children}
       </body>
     </html>
   );

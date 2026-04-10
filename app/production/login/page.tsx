@@ -23,9 +23,9 @@ export default function LoginPage() {
 
     if (result.success) {
       if (result.mustChangePassword) {
-        router.push("/login/change-password");
+        router.push("/production/login/change-password");
       } else {
-        router.push("/admin");
+        router.push("/production/admin");
       }
     } else {
       setError(result.error ?? "로그인에 실패했습니다.");
@@ -38,7 +38,6 @@ export default function LoginPage() {
       className="min-h-screen flex items-center justify-center"
       style={{ background: "var(--bg-base)" }}
     >
-      {/* 배경 장식 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full opacity-20 blur-3xl"
@@ -51,7 +50,6 @@ export default function LoginPage() {
       </div>
 
       <div className="relative z-10 w-full max-w-sm px-4">
-        {/* 로고 */}
         <div className="flex flex-col items-center gap-2 mb-8">
           <div className="flex items-center gap-2">
             <Activity className="w-7 h-7" style={{ color: "var(--accent)" }} />
@@ -60,7 +58,6 @@ export default function LoginPage() {
           <p className="text-sm text-gray-500">AI Usage Monitoring & Coaching Platform</p>
         </div>
 
-        {/* 로그인 카드 */}
         <div className="glass rounded-2xl p-8">
           <h2 className="text-xl font-bold text-gray-900 mb-1">로그인</h2>
           <p className="text-sm text-gray-500 mb-6">조직 관리자가 발급한 계정으로 로그인하세요.</p>
@@ -132,7 +129,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* 푸터 */}
         <p className="text-center text-xs text-gray-400 mt-6">
           Softsquared Inc. · Gridge Logging
         </p>

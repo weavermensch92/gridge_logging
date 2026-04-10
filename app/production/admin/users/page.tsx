@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Search, X, Users,
-  ToggleLeft, ToggleRight, ChevronDown,
+  ToggleLeft, ToggleRight,
   Loader2, UserPlus, Shield, Edit3, Trash2,
 } from "lucide-react";
 import clsx from "clsx";
@@ -80,10 +80,9 @@ export default function UsersPage() {
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <button onClick={() => router.push("/admin")}
+            <button onClick={() => router.push("/production/admin")}
               className="p-2 rounded-xl glass hover:scale-105 transition-transform">
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
@@ -100,7 +99,6 @@ export default function UsersPage() {
           </button>
         </div>
 
-        {/* 필터 */}
         <div className="glass rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-gray-400">
             <Users className="w-4 h-4" />
@@ -129,7 +127,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* 유저 테이블 */}
         <div className="glass rounded-2xl overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -227,12 +224,9 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* 유저 추가 모달 */}
       {showAddModal && (
         <AddUserModal onClose={() => setShowAddModal(false)} onSuccess={fetchUsers} />
       )}
-
-      {/* 유저 편집 모달 */}
       {editUser && (
         <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSuccess={fetchUsers} />
       )}
@@ -261,10 +255,7 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     e.preventDefault();
     setSubmitting(true);
     await usersApi.create({
-      name,
-      email,
-      team,
-      role,
+      name, email, team, role,
       ai_tools: Array.from(tools),
       temp_password: tempPassword,
     });
@@ -281,11 +272,8 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
             <UserPlus className="w-5 h-5" style={{ color: "var(--accent)" }} />
             <h3 className="text-lg font-bold text-gray-800">신규 유저 추가</h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -299,7 +287,6 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200" />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">팀</label>
@@ -317,23 +304,19 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               </select>
             </div>
           </div>
-
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">AI 도구 선택</label>
             <div className="flex flex-wrap gap-2">
               {ALL_AI_TOOLS.map(t => (
                 <button key={t} type="button" onClick={() => toggleTool(t)}
                   className={clsx("text-xs px-3 py-1.5 rounded-full font-medium transition-colors border",
-                    tools.has(t)
-                      ? "text-white border-transparent"
-                      : "bg-white/60 border-white/80 text-gray-500 hover:bg-white/80")}
+                    tools.has(t) ? "text-white border-transparent" : "bg-white/60 border-white/80 text-gray-500 hover:bg-white/80")}
                   style={tools.has(t) ? { background: "var(--accent)" } : {}}>
                   {AI_TOOL_LABEL[t]}
                 </button>
               ))}
             </div>
           </div>
-
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">임시 비밀번호</label>
             <input type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} required
@@ -341,12 +324,9 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-200" />
             <p className="text-[10px] text-gray-400 mt-1">첫 로그인 시 비밀번호 변경이 강제됩니다.</p>
           </div>
-
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-white/60 text-gray-600 hover:bg-white/80 transition-colors">
-              취소
-            </button>
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-white/60 text-gray-600 hover:bg-white/80 transition-colors">취소</button>
             <button type="submit" disabled={submitting || !name || !email || !tempPassword}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
               style={{ background: "var(--accent)" }}>
@@ -379,8 +359,7 @@ function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () =
     e.preventDefault();
     setSubmitting(true);
     await usersApi.update(user.id, {
-      role,
-      team,
+      role, team,
       ai_tools: Array.from(tools),
       ai_quota_usd: Number(quota),
     });
@@ -397,11 +376,8 @@ function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () =
             <Shield className="w-5 h-5" style={{ color: "var(--accent)" }} />
             <h3 className="text-lg font-bold text-gray-800">{user.name} 설정 변경</h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -420,34 +396,27 @@ function EditUserModal({ user, onClose, onSuccess }: { user: User; onClose: () =
               </select>
             </div>
           </div>
-
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">AI 사용 한도 (USD)</label>
             <input type="number" value={quota} onChange={e => setQuota(e.target.value)} min="0" step="10"
               className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
-
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">AI 도구</label>
             <div className="flex flex-wrap gap-2">
               {ALL_AI_TOOLS.map(t => (
                 <button key={t} type="button" onClick={() => toggleTool(t)}
                   className={clsx("text-xs px-3 py-1.5 rounded-full font-medium transition-colors border",
-                    tools.has(t)
-                      ? "text-white border-transparent"
-                      : "bg-white/60 border-white/80 text-gray-500 hover:bg-white/80")}
+                    tools.has(t) ? "text-white border-transparent" : "bg-white/60 border-white/80 text-gray-500 hover:bg-white/80")}
                   style={tools.has(t) ? { background: "var(--accent)" } : {}}>
                   {AI_TOOL_LABEL[t]}
                 </button>
               ))}
             </div>
           </div>
-
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-white/60 text-gray-600 hover:bg-white/80 transition-colors">
-              취소
-            </button>
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-white/60 text-gray-600 hover:bg-white/80 transition-colors">취소</button>
             <button type="submit" disabled={submitting}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
               style={{ background: "var(--accent)" }}>
