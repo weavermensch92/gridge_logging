@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# installer output (멤버별 빌드 결과물)
+installer/output/
