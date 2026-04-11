@@ -1,28 +1,63 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
-import type { User } from "@/types";
+import type { User, UserRole } from "@/types";
 import { authApi } from "@/lib/api";
+import { isMockMode } from "@/lib/api/client";
 
 type AuthState = {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; mustChangePassword?: boolean; role?: string; error?: string }>;
+  login: (email: string, password: string) => Promise<{
+    success: boolean;
+    mustChangePassword?: boolean;
+    role?: UserRole;
+    error?: string;
+  }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/** 쿠키 유틸 */
+function setCookie(name: string, value: string, days = 7) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}; SameSite=Lax`;
+}
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const res = await authApi.me();
-    if (res.data) {
-      setUser(res.data);
-    } else {
+    try {
+      // mock 모드에서는 쿠키에 저장된 토큰이 있으면 유저 정보 조회
+      const token = getCookie("gridge_session");
+      if (!token && !isMockMode()) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const res = await authApi.me();
+      if (res.data) {
+        setUser(res.data);
+      } else {
+        setUser(null);
+        deleteCookie("gridge_session");
+        deleteCookie("gridge_role");
+      }
+    } catch {
       setUser(null);
     }
     setLoading(false);
@@ -33,21 +68,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login(email, password);
-    if (res.data) {
-      setUser(res.data.user);
-      return {
-        success: true,
-        mustChangePassword: res.data.user.must_change_password,
-        role: res.data.user.role,
-      };
+    try {
+      const res = await authApi.login(email, password);
+      if (res.data) {
+        const { user: loggedInUser, token } = res.data;
+        setUser(loggedInUser);
+
+        // 세션 토큰 + 역할을 쿠키에 저장 (middleware에서 읽음)
+        setCookie("gridge_session", token);
+        setCookie("gridge_role", loggedInUser.role);
+
+        return {
+          success: true,
+          mustChangePassword: (loggedInUser as User & { must_change_password?: boolean }).must_change_password,
+          role: loggedInUser.role,
+        };
+      }
+      return { success: false, error: res.error?.message ?? "로그인에 실패했습니다." };
+    } catch {
+      return { success: false, error: "서버에 연결할 수 없습니다." };
     }
-    return { success: false, error: res.error?.message };
   }, []);
 
   const logout = useCallback(async () => {
-    await authApi.logout();
+    try {
+      await authApi.logout();
+    } catch { /* ignore */ }
     setUser(null);
+    deleteCookie("gridge_session");
+    deleteCookie("gridge_role");
   }, []);
 
   return (
