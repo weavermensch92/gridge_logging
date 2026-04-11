@@ -26,10 +26,12 @@ export default function LoginPage() {
         router.push("/production/login/change-password");
       } else if (result.role === "super_admin") {
         router.push("/production/super-admin");
-      } else if (result.role === "member") {
-        router.push("/production/developer");
-      } else {
+      } else if (result.role === "admin") {
         router.push("/production/admin");
+      } else if (result.role === "team_lead") {
+        router.push("/production/admin/dashboard");
+      } else {
+        router.push("/production/developer");
       }
     } else {
       setError(result.error ?? "로그인에 실패했습니다.");

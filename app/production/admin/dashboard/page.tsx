@@ -95,6 +95,9 @@ export default function DashboardPage() {
                     <span className="text-sm font-bold text-gray-800">{team.name}</span>
                     <ChevronRight className="w-3 h-3 text-gray-300 group-hover:text-gray-500" />
                   </div>
+                  {team.lead_name && (
+                    <p className="text-[10px] text-gray-400 mb-0.5">팀장: {team.lead_name}</p>
+                  )}
                   <div className="flex gap-3 text-xs text-gray-500">
                     <span>{team.member_count ?? 0}명</span>
                     <span>${(team.used_usd ?? 0).toFixed(0)}</span>

@@ -37,8 +37,8 @@ export const MOCK_ORGS: Organization[] = [
 export const MOCK_ORG = MOCK_ORGS[0];
 
 export const MOCK_TEAMS: Team[] = [
-  { id: "team-001", org_id: "org-001", name: "개발팀", member_count: 3, used_usd: 210.3 },
-  { id: "team-002", org_id: "org-001", name: "디자인팀", member_count: 1, used_usd: 78.2 },
+  { id: "team-001", org_id: "org-001", name: "개발팀", lead_id: "u-005", lead_name: "김태영", member_count: 3, used_usd: 210.3 },
+  { id: "team-002", org_id: "org-001", name: "디자인팀", lead_id: "u-003", lead_name: "박서연", member_count: 1, used_usd: 78.2 },
   { id: "team-003", org_id: "org-001", name: "기획팀", member_count: 1, used_usd: 54.0 },
 ];
 
@@ -63,7 +63,7 @@ export const MOCK_USERS: User[] = [
   },
   {
     id: "u-003", org_id: "org-001", team_id: "team-002", team_name: "디자인팀",
-    name: "박서연", email: "seoyeon@softsquared.com", role: "member",
+    name: "박서연", email: "seoyeon@softsquared.com", role: "team_lead",
     status: "active", ai_enabled: true, ai_tools: ["chatgpt", "gemini_web"], ai_quota_usd: 30, ai_used_usd: 14.8,
     onboarding_step: "complete", created_at: "2025-07-01T00:00:00Z",
   },
@@ -74,8 +74,14 @@ export const MOCK_USERS: User[] = [
     onboarding_step: "complete", created_at: "2025-07-15T00:00:00Z",
   },
   {
+    id: "u-010", org_id: "org-001", // admin은 특정 팀 소속 없이 기업 전체 관리
+    name: "정우진", email: "woojin@softsquared.com", role: "admin",
+    status: "active", ai_enabled: false, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
+    onboarding_step: "complete", created_at: "2025-02-01T00:00:00Z",
+  },
+  {
     id: "u-005", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
-    name: "김태영", email: "taeyoung@softsquared.com", role: "admin",
+    name: "김태영", email: "taeyoung@softsquared.com", role: "team_lead",
     status: "active", ai_enabled: true, ai_tools: ["claude_code", "chatgpt"], ai_quota_usd: 80, ai_used_usd: 45.2,
     onboarding_step: "complete", created_at: "2025-03-01T00:00:00Z",
   },

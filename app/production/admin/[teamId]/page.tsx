@@ -101,7 +101,10 @@ export default function TeamDetailPage() {
     <div className="p-6 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
-        <p className="text-sm text-gray-500">팀 멤버 · AI 로그 · 성숙도 · 보안</p>
+        <p className="text-sm text-gray-500">
+          {team.lead_name ? `팀장: ${team.lead_name} · ` : ""}
+          팀 멤버 · AI 로그 · 성숙도 · 보안
+        </p>
       </div>
 
       {/* 통계 카드 */}
@@ -166,7 +169,7 @@ export default function TeamDetailPage() {
                   <tr key={user.id} className="border-b border-white/50 hover:bg-white/20 transition-colors">
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-[10px]" style={{ background: "var(--accent)" }}>{user.name[0]}</div><span className="text-sm font-medium text-gray-800">{user.name}</span></div></td>
                     <td className="px-4 py-3 text-xs text-gray-500">{user.email}</td>
-                    <td className="px-4 py-3"><span className={clsx("text-[10px] font-semibold px-2 py-0.5 rounded-full", user.role === "admin" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600")}>{user.role === "admin" ? "Admin" : "Member"}</span></td>
+                    <td className="px-4 py-3"><span className={clsx("text-[10px] font-semibold px-2 py-0.5 rounded-full", user.role === "admin" ? "bg-blue-100 text-blue-700" : user.role === "team_lead" ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-600")}>{user.role === "admin" ? "Admin" : user.role === "team_lead" ? "팀장" : "Member"}</span></td>
                     <td className="px-4 py-3"><button onClick={() => toggleAi(user)}>{user.ai_enabled ? <ToggleRight className="w-6 h-6 text-green-500" /> : <ToggleLeft className="w-6 h-6 text-gray-300" />}</button></td>
                     <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.ai_tools.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{AI_TOOL_LABEL[t]}</span>)}</div></td>
                     <td className="px-4 py-3 text-xs"><span className="text-gray-700 font-medium">${user.ai_used_usd.toFixed(1)}</span><span className="text-gray-400"> / ${user.ai_quota_usd}</span></td>

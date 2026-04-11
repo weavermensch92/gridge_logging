@@ -13,6 +13,7 @@ import { usersApi, teamsApi } from "@/lib/api";
 const ROLE_LABEL: Record<UserRole, { label: string; color: string }> = {
   super_admin: { label: "Super Admin", color: "bg-purple-100 text-purple-700" },
   admin:       { label: "Admin",       color: "bg-blue-100 text-blue-700" },
+  team_lead:   { label: "팀장",         color: "bg-indigo-100 text-indigo-700" },
   member:      { label: "Member",      color: "bg-gray-100 text-gray-600" },
 };
 
@@ -317,6 +318,7 @@ function AddUserModal({ teams, onClose, onSuccess }: { teams: Team[]; onClose: (
               <select value={role} onChange={e => setRole(e.target.value as UserRole)}
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200">
                 <option value="member">Member</option>
+                <option value="team_lead">팀장</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -428,6 +430,7 @@ function EditUserModal({ user, teams, onClose, onSuccess }: { user: User; teams:
               <select value={role} onChange={e => setRole(e.target.value as UserRole)}
                 className="w-full px-3 py-2 text-sm rounded-lg bg-white/60 border border-white/80 text-gray-700 outline-none focus:ring-2 focus:ring-blue-200">
                 <option value="member">Member</option>
+                <option value="team_lead">팀장</option>
                 <option value="admin">Admin</option>
               </select>
             </div>

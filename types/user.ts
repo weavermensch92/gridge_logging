@@ -1,4 +1,4 @@
-export type UserRole = "super_admin" | "admin" | "member";
+export type UserRole = "super_admin" | "admin" | "team_lead" | "member";
 export type UserStatus = "active" | "suspended" | "invited";
 export type AiToolType = "chatgpt" | "claude_web" | "gemini_web" | "claude_code" | "cursor";
 
@@ -18,7 +18,8 @@ export type AiToolSetup = {
 
 // ── 계층: Super Admin → Organization → Team → User ──
 // super_admin: 플랫폼 관리자 — 기업(Organization) 생성/삭제, admin 지정
-// admin: 기업 관리자 — 팀(Team) 생성/삭제, 멤버 추가/관리
+// admin: 기업 관리자 — 팀 생성/삭제, 전체 유저/예산/보안 관리
+// team_lead: 팀장 — 소속 팀 멤버 관리 (추가/삭제/AI 권한), 팀 로그/성숙도 열람
 // member: 팀원 — 본인 AI 사용, 로그 확인
 
 export type Organization = {
@@ -38,6 +39,8 @@ export type Team = {
   id: string;
   org_id: string;
   name: string;
+  lead_id?: string;              // 팀장 유저 ID (admin이 지정)
+  lead_name?: string;            // 조회 편의용
   ai_budget_usd?: number;       // 팀별 예산 (선택)
   member_count?: number;         // 조회 시 집계
   used_usd?: number;             // 조회 시 집계

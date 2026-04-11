@@ -41,9 +41,11 @@ Super Admin (그릿지 플랫폼 관리자)
 └── Organization (기업) ← super_admin이 생성/삭제
     └── Admin (기업 관리자) ← super_admin이 지정
         ├── Team A (팀) ← admin이 생성/삭제
+        │   ├── Team Lead (팀장) ← admin이 지정
         │   ├── Member 1
         │   └── Member 2
         └── Team B (팀)
+            ├── Team Lead (팀장)
             └── Member 3
 ```
 
@@ -52,7 +54,8 @@ Super Admin (그릿지 플랫폼 관리자)
 | 역할 | 범위 | 권한 |
 |------|------|------|
 | `super_admin` | **플랫폼 전체** | 기업(Organization) 생성/삭제, 기업별 admin 지정, 전체 현황 |
-| `admin` | **소속 기업** | 팀 생성/삭제, 유저 추가/관리, AI 예산 설정, 보안 규칙 관리 |
+| `admin` | **소속 기업** | 팀 생성/삭제, 팀장 지정, 전체 유저 관리, AI 예산/보안 설정 |
+| `team_lead` | **소속 팀** | 팀원 추가/삭제, AI 권한 토글, 팀 로그/성숙도/위험 로그 열람 |
 | `member` | **본인** | 본인 로그 열람, 코칭 리포트 확인, 한도 연장 요청 |
 
 ### 프로덕션 라우트 (역할별)
