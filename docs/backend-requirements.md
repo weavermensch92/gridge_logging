@@ -900,3 +900,102 @@ ALTER TABLE maturity_assessments ADD COLUMN
 - 유저당 월 1회 LLM 호출 (리포트 생성 시)
 - 열람 시 AI 호출 0회 (DB 캐시)
 - 관리자가 100번 열람해도 AI 비용 동일
+
+---
+
+## 14. 로그 자동 분류 체계
+
+### 목적
+
+수집된 모든 로그를 아래 규칙에 따라 자동 분류하여, 성숙도 평가 및 대시보드 분석에 활용합니다.
+
+### 분류 시점
+
+로그 ingest → Bull Queue 워커에서 **비동기 분류** → `log_classifications` 테이블에 저장
+
+### DB 스키마
+
+```sql
+CREATE TABLE log_classifications (
+  log_id UUID PRIMARY KEY REFERENCES logs(id),
+
+  -- 카테고리 분류
+  sdlc_phase VARCHAR(20),          -- requirements|design|implementation|testing|maintenance|documentation
+  task_intent VARCHAR(20),         -- creation|refactoring|debugging|review|learning|planning|operation
+  artifact_type VARCHAR(20),       -- code|test|config|docs|ci_cd|data
+  prompt_structure_level VARCHAR(20), -- short|structured|role_based
+  context_usage VARCHAR(10),       -- none|partial|rich
+  validation_presence VARCHAR(10), -- none|implicit|explicit
+  iteration_depth VARCHAR(10),     -- single|shallow|deep
+  execution_vs_decision VARCHAR(10), -- execution|decision|hybrid
+  control_level VARCHAR(20),       -- low_control|medium_control|high_control
+
+  -- 감지 플래그
+  retry_loop_detected BOOLEAN DEFAULT false,
+  over_token_usage BOOLEAN DEFAULT false,
+  low_reuse_prompt BOOLEAN DEFAULT false,
+  fire_fighting_mode BOOLEAN DEFAULT false,
+
+  classified_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 유저별 집계 테이블 (일간/주간 배치)
+
+```sql
+CREATE TABLE user_log_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  period VARCHAR(20) NOT NULL,     -- "2026-04-11" 또는 "2026-W15"
+  prompts INTEGER DEFAULT 0,
+  total_tokens INTEGER DEFAULT 0,
+  total_cost_usd DECIMAL(10,4) DEFAULT 0,
+  p90_tokens INTEGER DEFAULT 0,
+  reuse_rate DECIMAL(5,4) DEFAULT 0,          -- 0~1
+  fire_fighting_ratio DECIMAL(5,4) DEFAULT 0, -- 0~1
+  retry_loop_rate DECIMAL(5,4) DEFAULT 0,     -- 0~1
+  over_token_rate DECIMAL(5,4) DEFAULT 0,     -- 0~1
+  smalltalk_rate DECIMAL(5,4) DEFAULT 0,      -- 0~1
+  sdlc_distribution JSONB,         -- { "implementation": 0.45, "testing": 0.20, ... }
+  artifact_distribution JSONB,     -- { "code": 0.60, "test": 0.15, ... }
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, period)
+);
+```
+
+### 분류 규칙 상세
+
+| 필드 | 값 | 판별 규칙 |
+|------|------|----------|
+| `sdlc_phase` | requirements/design/implementation/testing/maintenance/documentation | 키워드 → 이터리 기반 분류 |
+| `task_intent` | creation/refactoring/debugging/review/learning/planning/operation | 프롬프트 키워드 1차 → AI 의도 분석 2차 |
+| `artifact_type` | code/test/config/docs/ci_cd/data | 파일 확장자 + 프롬프트/응답 패턴 |
+| `prompt_structure_level` | short/structured/role_based | 역할 지정/구조화 키워드/조건/제약 포함 여부 |
+| `context_usage` | none/partial/rich | 이전 대화 참조, 코드/파일 첨부 여부 |
+| `validation_presence` | none/implicit/explicit | 응답에 테스트/검증 과정 포함 여부 |
+| `iteration_depth` | single/shallow/deep | interaction 내 user 메시지 수 (1/2-3/4+) |
+| `execution_vs_decision` | execution/decision/hybrid | 비교/구조 vs 생성/수정 키워드 |
+| `control_level` | low/medium/high_control | goal만 vs 상세 수정 키워드 |
+| `retry_loop_detected` | true/false | user 내 동일 prompt_key 3회+ (deep or debugging or again 포함) |
+| `over_token_usage` | true/false | 조직 전체 estimated_total_tokens 대비 상위 10% (p90) |
+| `low_reuse_prompt` | true/false | low_reuse_key 기준값 >60% |
+| `fire_fighting_mode` | true/false | 단위 업무당 디버깅 비율 >60% |
+
+### 수치 지표 (user_log_stats)
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `prompts` | number | 총 프롬프트 수 |
+| `total_tokens` | number | 누적 토큰 |
+| `total_cost_usd` | number | 비용 |
+| `p90_tokens` | number | 토큰 상위 10% |
+| `reuse_rate` | 0~1 | 재사용 프롬프트 비율 |
+| `fire_fighting_ratio` | 0~1 | 디버깅/디버깅 비율 |
+| `retry_loop_rate` | 0~1 | retry별 토큰 비율 |
+| `over_token_rate` | 0~1 | 비정상 토큰 비율 |
+| `smalltalk_rate` | 0~1 | 비업무 프롬프트 비율 |
+
+### 타입 정의
+
+프론트엔드 타입: `types/log-classification.ts` 참조
+분류 규칙 상수: `CLASSIFICATION_RULES` export
