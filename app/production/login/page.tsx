@@ -31,7 +31,7 @@ export default function LoginPage() {
       } else if (result.role === "team_lead") {
         router.push("/production/team-lead");
       } else {
-        router.push("/production/developer");
+        router.push("/production/member");
       }
     } else {
       setError(result.error ?? "로그인에 실패했습니다.");

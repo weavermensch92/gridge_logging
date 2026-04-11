@@ -19,7 +19,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   super_admin: ["/production/super-admin"],
   admin:       ["/production/admin"],
   team_lead:   ["/production/team-lead"],
-  member:      ["/production/developer"],
+  member:      ["/production/member", "/production/developer"],
 };
 
 function isPublic(pathname: string) {
