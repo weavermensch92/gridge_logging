@@ -1,0 +1,12 @@
+{
+  "name": "gridge-system-proxy",
+  "version": "1.0.0",
+  "description": "Gridge 시스템 HTTPS 프록시 — AI 앱 트래픽 선택적 인터셉트",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "gen-cert": "node gen-cert.js",
+    "install-cert": "node install-cert.js"
+  },
+  "dependencies": {}
+}
