@@ -230,12 +230,16 @@ function captureApiLog(hostname, reqHeaders, reqBody, resBody, startTime) {
 }
 
 // 로그 전송
+const { encryptPayload } = require("../lib/crypto.js");
+
 async function flushLogs() {
   if (LOG_QUEUE.length === 0 || !CONFIG.serverUrl || !CONFIG.apiKey) return;
   const logs = LOG_QUEUE.splice(0, 20);
   try {
+    const rawPayload = { logs, api_key: CONFIG.apiKey };
+    const { encrypted, payload } = await encryptPayload(rawPayload, CONFIG.serverUrl);
     const url = new URL("/api/logs/ingest", CONFIG.serverUrl);
-    const body = JSON.stringify({ logs, api_key: CONFIG.apiKey });
+    const body = JSON.stringify(encrypted ? { encrypted: true, ...payload } : payload);
     const proto = url.protocol === "https:" ? https : http;
     await new Promise((resolve, reject) => {
       const req = proto.request(url, {
@@ -246,7 +250,7 @@ async function flushLogs() {
       req.write(body);
       req.end();
     });
-    console.log(`[Gridge] ${logs.length}건 전송 완료`);
+    console.log(`[Gridge] ${logs.length}건 전송 (암호화: ${encrypted ? "ON" : "OFF"})`);
   } catch { /* retry next */ }
 }
 setInterval(flushLogs, 10_000);

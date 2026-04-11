@@ -164,13 +164,19 @@ function calculateCost(model, input, output) {
   return (input / 1000) * 0.003 + (output / 1000) * 0.015;
 }
 
+const { encryptPayload } = require("../lib/crypto.js");
+
 async function flushQueue() {
   if (LOG_QUEUE.length === 0 || !CONFIG.serverUrl || !CONFIG.apiKey) return;
 
   const logs = LOG_QUEUE.splice(0, 20);
   try {
+    const rawPayload = { logs, api_key: CONFIG.apiKey };
+
+    // 암호화 (서버 공개키가 있으면 암호화, 없으면 평문)
+    const { encrypted, payload } = await encryptPayload(rawPayload, CONFIG.serverUrl);
     const url = new URL("/api/logs/ingest", CONFIG.serverUrl);
-    const body = JSON.stringify({ logs, api_key: CONFIG.apiKey });
+    const body = JSON.stringify(encrypted ? { encrypted: true, ...payload } : payload);
     const proto = url.protocol === "https:" ? https : http;
 
     await new Promise((resolve, reject) => {
@@ -181,7 +187,7 @@ async function flushQueue() {
         let data = "";
         res.on("data", d => data += d);
         res.on("end", () => {
-          console.log(`[Gridge Proxy] ${logs.length}건 전송 완료`);
+          console.log(`[Gridge Proxy] ${logs.length}건 전송 완료 (암호화: ${encrypted ? "ON" : "OFF"})`);
           resolve();
         });
       });

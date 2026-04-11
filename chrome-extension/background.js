@@ -1,3 +1,6 @@
+// 암호화 모듈 로드
+try { importScripts("crypto.js"); } catch { /* crypto.js 없으면 평문 전송 */ }
+
 /**
  * Gridge AI Logger — Background Service Worker
  *
@@ -29,7 +32,7 @@ async function flushLogs() {
   if (!config.serverUrl || !config.apiKey || !config.enabled) return;
 
   const logsToSend = LOG_QUEUE.splice(0, BATCH_SIZE);
-  const payload = {
+  const rawPayload = {
     logs: logsToSend.map(log => ({
       user_id: config.userId,
       ...log,
@@ -38,19 +41,27 @@ async function flushLogs() {
   };
 
   try {
+    // 암호화 시도 (crypto.js가 로드된 경우)
+    let body;
+    if (typeof gridgeCrypto !== "undefined") {
+      const { encrypted, payload: encPayload } = await gridgeCrypto.encryptPayload(rawPayload, config.serverUrl);
+      body = JSON.stringify(encrypted ? { encrypted: true, ...encPayload } : rawPayload);
+    } else {
+      body = JSON.stringify(rawPayload);
+    }
+
     const res = await fetch(`${config.serverUrl}/api/logs/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body,
     });
 
     if (!res.ok) {
       console.error("[Gridge] 로그 전송 실패:", res.status);
-      // 실패한 로그를 큐 앞에 다시 추가
       LOG_QUEUE.unshift(...logsToSend);
     } else {
       const data = await res.json();
-      console.log(`[Gridge] ${data.ingested}건 전송 완료`);
+      console.log(`[Gridge] ${data.ingested}건 전송 완료 (암호화)`);
       // 배지 업데이트
       updateBadge();
     }

@@ -704,3 +704,199 @@ volumes:
 **응답 포맷**: 모든 API는 `{ data: T }` 또는 `{ error: { code: string, message: string } }` 형태.
 
 **인증 전달**: `credentials: "include"` (쿠키 자동 전송). 백엔드는 `Set-Cookie` + CORS `Access-Control-Allow-Credentials: true` 설정 필요.
+
+---
+
+## 12. 로그 전송 암호화 (E2E Encryption)
+
+### 목적
+
+클라이언트(Extension/Proxy) → 서버 간 로그 전송 시, **네트워크 중간에서 인터셉트해도 내용을 알 수 없게** 암호화합니다. HTTPS 위에 추가적인 애플리케이션 레벨 암호화입니다.
+
+### 방식: AES-256-GCM + RSA-OAEP (하이브리드 암호화)
+
+```
+클라이언트                              서버
+  │                                      │
+  │  1. 랜덤 AES-256 키 생성             │
+  │  2. 로그 JSON → AES-256-GCM 암호화   │
+  │  3. AES 키 → 서버 RSA 공개키로 암호화│
+  │                                      │
+  │  ──── { encryptedKey, iv,        ──► │
+  │         authTag, ciphertext }        │
+  │                                      │
+  │                 4. RSA 개인키로 AES 키 복호화
+  │                 5. AES-256-GCM으로 본문 복호화
+  │                 6. 원본 { logs, api_key } 획득
+```
+
+### 백엔드 구현 필요 사항
+
+#### 1. RSA 키 쌍 생성 + 관리
+
+```bash
+# 서버 RSA 키 쌍 생성 (최초 1회)
+openssl genrsa -out server-private.pem 2048
+openssl rsa -in server-private.pem -pubout -out server-public.pem
+```
+
+- `server-private.pem` → 서버만 보유 (절대 외부 노출 금지)
+- `server-public.pem` → 클라이언트에 배포 (API로 제공)
+
+#### 2. 공개키 배포 API
+
+```
+GET /api/crypto/public-key
+→ { "publicKey": "-----BEGIN PUBLIC KEY-----\n..." }
+```
+
+클라이언트가 최초 실행 시 이 API를 호출하여 공개키를 받아 로컬에 캐시합니다.
+
+#### 3. Ingest API 복호화 처리
+
+`POST /api/logs/ingest` 요청 본문 형태:
+
+**암호화된 경우:**
+```json
+{
+  "encrypted": true,
+  "encryptedKey": "base64...",
+  "iv": "base64...",
+  "authTag": "base64...",
+  "ciphertext": "base64...",
+  "algorithm": "aes-256-gcm",
+  "keyAlgorithm": "rsa-oaep-sha256"
+}
+```
+
+**암호화되지 않은 경우 (fallback):**
+```json
+{
+  "logs": [...],
+  "api_key": "..."
+}
+```
+
+**백엔드 처리 로직:**
+```javascript
+function handleIngest(req) {
+  let payload;
+  if (req.body.encrypted) {
+    // 복호화
+    payload = decryptPayload(req.body, SERVER_PRIVATE_KEY);
+  } else {
+    // 평문 (공개키 미배포 상태)
+    payload = req.body;
+  }
+  // payload.logs, payload.api_key 사용
+}
+```
+
+#### 4. 복호화 참조 구현 (Node.js)
+
+```javascript
+// lib/crypto.js의 decryptPayload 함수 참조
+const crypto = require("crypto");
+
+function decryptPayload(encryptedPayload, privateKeyPem) {
+  const { encryptedKey, iv, authTag, ciphertext } = encryptedPayload;
+
+  // RSA 개인키로 AES 키 복호화
+  const aesKey = crypto.privateDecrypt(
+    { key: privateKeyPem,
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: "sha256" },
+    Buffer.from(encryptedKey, "base64")
+  );
+
+  // AES-256-GCM으로 본문 복호화
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm", aesKey, Buffer.from(iv, "base64")
+  );
+  decipher.setAuthTag(Buffer.from(authTag, "base64"));
+
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64")),
+    decipher.final(),
+  ]);
+
+  return JSON.parse(decrypted.toString("utf8"));
+}
+```
+
+#### 5. 환경변수
+
+```bash
+# RSA 키 파일 경로
+CRYPTO_PRIVATE_KEY_PATH=/etc/gridge/server-private.pem
+CRYPTO_PUBLIC_KEY_PATH=/etc/gridge/server-public.pem
+```
+
+### 클라이언트 구현 (이미 완료)
+
+| 구성 | 파일 | 암호화 방식 |
+|------|------|-----------|
+| Chrome Extension | `chrome-extension/crypto.js` | Web Crypto API (AES-GCM + RSA-OAEP) |
+| 로컬 프록시 | `lib/crypto.js` | Node.js crypto (AES-GCM + RSA-OAEP) |
+| 시스템 프록시 | `lib/crypto.js` | 동일 |
+
+- 서버 공개키가 없으면 → 평문 전송 (fallback)
+- 서버 공개키가 있으면 → 자동 암호화
+
+---
+
+## 13. 로그 분석 캐싱 (AI 호출 최소화)
+
+### 목적
+
+로그 분석 결과를 **열람할 때마다 AI를 호출하지 않고**, 최초 분석 시에만 AI를 사용하고 결과를 DB에 캐싱합니다.
+
+### AI 호출 시점 (2회만)
+
+| 시점 | AI 호출 내용 | 결과 저장 |
+|------|-------------|----------|
+| **로그 최초 수집 시** | 보안 스캔 (정규식) — AI 미사용 | `risk_alerts` |
+| **월간 리포트 생성 시** | 성숙도 평가 + 코칭 코멘트 생성 (LLM 호출) | `maturity_assessments` |
+
+### 이후 열람 시 — DB에서 조회만
+
+```
+관리자가 성숙도 리포트 열람
+  → GET /api/maturity/:userId
+  → DB에서 maturity_assessments 조회 (AI 호출 없음)
+  → 캐싱된 scores, coaching_comment 반환
+
+관리자가 보안 알림 열람
+  → GET /api/risk-alerts
+  → DB에서 risk_alerts 조회 (AI 호출 없음)
+
+관리자가 로그 열람
+  → GET /api/logs
+  → DB에서 logs 조회 (AI 호출 없음)
+```
+
+### 백엔드 구현
+
+```sql
+-- maturity_assessments 테이블에 분석 결과 캐싱
+ALTER TABLE maturity_assessments ADD COLUMN
+  analysis_cache JSONB;  -- AI가 생성한 전체 분석 결과
+
+-- 캐시 유효성
+ALTER TABLE maturity_assessments ADD COLUMN
+  cache_valid_until TIMESTAMPTZ;  -- 이 시간 이후 재분석 필요
+```
+
+**월간 리포트 생성 배치 (node-cron, 매월 1일):**
+```
+1. 전월 로그 집계 (SQL)
+2. 점수 계산 (규칙 기반 — AI 미사용)
+3. 코칭 코멘트 생성 (LLM 1회 호출 — 그릿지 API 키)
+4. maturity_assessments INSERT (scores + coaching_comment + analysis_cache)
+5. 이후 GET /api/maturity/:userId → DB 조회만
+```
+
+**비용 절감 효과:**
+- 유저당 월 1회 LLM 호출 (리포트 생성 시)
+- 열람 시 AI 호출 0회 (DB 캐시)
+- 관리자가 100번 열람해도 AI 비용 동일
