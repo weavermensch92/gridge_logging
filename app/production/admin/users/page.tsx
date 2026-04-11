@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Search, X, Users,
+  Plus, Search, X, Users,
   ToggleLeft, ToggleRight,
   Loader2, UserPlus, Shield, Edit3, Trash2,
 } from "lucide-react";
@@ -40,7 +39,6 @@ const AI_TOOL_LABEL: Record<AiToolType, string> = {
 const ALL_AI_TOOLS: AiToolType[] = ["chatgpt", "claude_web", "gemini_web", "claude_code", "cursor"];
 
 export default function UsersPage() {
-  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,23 +88,11 @@ export default function UsersPage() {
   };
 
   return (
-    <main className="min-h-screen p-6" style={{ background: "var(--bg-base)" }}>
-      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full opacity-10 blur-3xl"
-          style={{ background: "var(--accent)" }} />
-      </div>
-
-      <div className="max-w-6xl mx-auto">
+    <div className="p-6 max-w-6xl">
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <button onClick={() => router.push("/production/admin")}
-              className="p-2 rounded-xl glass hover:scale-105 transition-transform">
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">유저 관리</h1>
-              <p className="text-sm text-gray-500">유저 추가/삭제, AI 사용 권한 관리</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">유저 관리</h1>
+            <p className="text-sm text-gray-500">유저 추가/삭제, AI 사용 권한 관리</p>
           </div>
           <button onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
@@ -246,7 +232,6 @@ export default function UsersPage() {
             <p className="text-xs text-gray-400">{filtered.length}명 표시 · 전체 {users.length}명</p>
           </div>
         </div>
-      </div>
 
       {showAddModal && (
         <AddUserModal teams={teams} onClose={() => setShowAddModal(false)} onSuccess={fetchUsers} />
@@ -254,7 +239,7 @@ export default function UsersPage() {
       {editUser && (
         <EditUserModal user={editUser} teams={teams} onClose={() => setEditUser(null)} onSuccess={fetchUsers} />
       )}
-    </main>
+    </div>
   );
 }
 
