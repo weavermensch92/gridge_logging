@@ -1,103 +1,88 @@
 @echo off
 chcp 65001 >nul
-title Gridge AI Logger 설치
+title Gridge AI Logger 통합 설치
 
-REM ═══ 사전 주입 설정 (백엔드가 멤버별로 채움) ═══
+REM ═══ 사전 주입 설정 ═══
 set GRIDGE_SERVER=__GRIDGE_SERVER__
 set GRIDGE_API_KEY=__GRIDGE_API_KEY__
 set GRIDGE_USER_ID=__GRIDGE_USER_ID__
-set PROXY_PORT=8080
-
-REM ═══ 경로 ═══
+set LOCAL_PORT=8080
+set SYSTEM_PORT=9090
 set GRIDGE_HOME=%USERPROFILE%\.gridge
-set EXT_DIR=%GRIDGE_HOME%\chrome-extension
-set PROXY_DIR=%GRIDGE_HOME%\local-proxy
 
 echo.
-echo   ╔══════════════════════════════════════════╗
-echo   ║     Gridge AI Logger 설치 시작            ║
-echo   ╠══════════════════════════════════════════╣
+echo   ╔══════════════════════════════════════════════╗
+echo   ║     Gridge AI Logger 통합 설치                ║
+echo   ╠══════════════════════════════════════════════╣
 echo   ║  유저: %GRIDGE_USER_ID%
 echo   ║  서버: %GRIDGE_SERVER%
-echo   ╚══════════════════════════════════════════╝
+echo   ╚══════════════════════════════════════════════╝
 echo.
 
-REM ═══ 1. 디렉토리 생성 ═══
-if not exist "%EXT_DIR%" mkdir "%EXT_DIR%"
-if not exist "%PROXY_DIR%" mkdir "%PROXY_DIR%"
-
-REM ═══ 2. Chrome Extension 설치 ═══
-echo [1/4] Chrome Extension 설치 중...
-set SCRIPT_DIR=%~dp0
-if exist "%SCRIPT_DIR%chrome-extension\" (
-  xcopy /s /y /q "%SCRIPT_DIR%chrome-extension\*" "%EXT_DIR%\" >nul
+REM 1. 소스 다운로드
+echo [1/6] 소스 다운로드 중...
+where git >nul 2>&1 && (
+  if exist "%TEMP%\gridge_install" rmdir /s /q "%TEMP%\gridge_install"
+  git clone --depth 1 https://github.com/weavermensch92/gridge_logging.git "%TEMP%\gridge_install" 2>nul
+  echo   ✓ 다운로드 완료
+) || (
+  echo   ✗ git이 없습니다. GitHub에서 ZIP 다운로드 후 수동 설치
+  pause & exit /b 1
 )
 
-REM config.json 생성
-(
-echo {
-echo   "serverUrl": "%GRIDGE_SERVER%",
-echo   "apiKey": "%GRIDGE_API_KEY%",
-echo   "userId": "%GRIDGE_USER_ID%",
-echo   "enabled": true
-echo }
-) > "%EXT_DIR%\config.json"
-echo   ✓ Extension 설치: %EXT_DIR%
+REM 2. Chrome Extension
+echo [2/6] Chrome Extension 설치 중...
+mkdir "%GRIDGE_HOME%\chrome-extension" 2>nul
+xcopy /s /y /q "%TEMP%\gridge_install\chrome-extension\*" "%GRIDGE_HOME%\chrome-extension\" >nul 2>&1
+(echo {"serverUrl":"%GRIDGE_SERVER%","apiKey":"%GRIDGE_API_KEY%","userId":"%GRIDGE_USER_ID%","enabled":true}) > "%GRIDGE_HOME%\chrome-extension\config.json"
+echo   ✓ %GRIDGE_HOME%\chrome-extension\
 
-REM ═══ 3. 로컬 프록시 설치 ═══
-echo.
-echo [2/4] 로컬 프록시 설치 중...
-if exist "%SCRIPT_DIR%local-proxy\" (
-  xcopy /s /y /q "%SCRIPT_DIR%local-proxy\*" "%PROXY_DIR%\" >nul
-)
+REM 3. 로컬 프록시
+echo [3/6] 로컬 프록시 설치 중...
+mkdir "%GRIDGE_HOME%\local-proxy" 2>nul
+xcopy /s /y /q "%TEMP%\gridge_install\local-proxy\*" "%GRIDGE_HOME%\local-proxy\" >nul 2>&1
+(echo {"serverUrl":"%GRIDGE_SERVER%","apiKey":"%GRIDGE_API_KEY%","userId":"%GRIDGE_USER_ID%","port":%LOCAL_PORT%}) > "%GRIDGE_HOME%\local-proxy\config.json"
+echo   ✓ %GRIDGE_HOME%\local-proxy\
 
-(
-echo {
-echo   "serverUrl": "%GRIDGE_SERVER%",
-echo   "apiKey": "%GRIDGE_API_KEY%",
-echo   "userId": "%GRIDGE_USER_ID%",
-echo   "port": %PROXY_PORT%
-echo }
-) > "%PROXY_DIR%\config.json"
-echo   ✓ 프록시 설치: %PROXY_DIR%
+REM 4. 시스템 프록시
+echo [4/6] 시스템 HTTPS 프록시 설치 중...
+mkdir "%GRIDGE_HOME%\system-proxy" 2>nul
+xcopy /s /y /q "%TEMP%\gridge_install\system-proxy\*" "%GRIDGE_HOME%\system-proxy\" >nul 2>&1
+(echo {"port":%SYSTEM_PORT%,"serverUrl":"%GRIDGE_SERVER%","apiKey":"%GRIDGE_API_KEY%","userId":"%GRIDGE_USER_ID%","interceptDomains":["api.anthropic.com","api.openai.com","claude.ai","chatgpt.com"],"captureMode":"company_only","companyApiKeys":[]}) > "%GRIDGE_HOME%\system-proxy\config.json"
+echo   ✓ %GRIDGE_HOME%\system-proxy\
 
-REM ═══ 4. 환경변수 설정 ═══
-echo.
-echo [3/4] 환경변수 설정 중...
-setx ANTHROPIC_BASE_URL "http://localhost:%PROXY_PORT%/v1" >nul 2>&1
+REM 5. 환경변수
+echo [5/6] 환경변수 설정 중...
+setx ANTHROPIC_BASE_URL "http://localhost:%LOCAL_PORT%/v1" >nul 2>&1
 setx GRIDGE_SERVER "%GRIDGE_SERVER%" >nul 2>&1
 setx GRIDGE_API_KEY "%GRIDGE_API_KEY%" >nul 2>&1
 setx GRIDGE_USER_ID "%GRIDGE_USER_ID%" >nul 2>&1
-set ANTHROPIC_BASE_URL=http://localhost:%PROXY_PORT%/v1
-echo   ✓ ANTHROPIC_BASE_URL=http://localhost:%PROXY_PORT%/v1
+set ANTHROPIC_BASE_URL=http://localhost:%LOCAL_PORT%/v1
+echo   ✓ ANTHROPIC_BASE_URL=http://localhost:%LOCAL_PORT%/v1
 
-REM ═══ 5. 프록시 시작 ═══
-echo.
-echo [4/4] 프록시 시작 중...
-where node >nul 2>&1
-if %errorlevel%==0 (
-  taskkill /f /im "node.exe" /fi "WINDOWTITLE eq Gridge*" >nul 2>&1
-  start "Gridge Proxy" /min node "%PROXY_DIR%\proxy.js"
-  echo   ✓ 프록시 실행 중
-) else (
-  echo   ✗ Node.js가 설치되어 있지 않습니다.
-  echo     https://nodejs.org 에서 설치 후 다시 실행해주세요.
+REM 6. 프록시 시작
+echo [6/6] 프록시 시작 중...
+where node >nul 2>&1 && (
+  taskkill /f /fi "WINDOWTITLE eq Gridge*" >nul 2>&1
+  start "Gridge Local Proxy" /min node "%GRIDGE_HOME%\local-proxy\proxy.js"
+  echo   ✓ 로컬 프록시 실행
+) || (
+  echo   ✗ Node.js가 없습니다. https://nodejs.org 설치 필요
 )
 
-REM ═══ 완료 ═══
+rmdir /s /q "%TEMP%\gridge_install" 2>nul
+
 echo.
-echo   ╔══════════════════════════════════════════╗
-echo   ║         설치 완료!                       ║
-echo   ╠══════════════════════════════════════════╣
-echo   ║                                          ║
-echo   ║  Chrome Extension:                       ║
-echo   ║    chrome://extensions → 개발자 모드     ║
-echo   ║    → %EXT_DIR% 로드                      ║
-echo   ║                                          ║
-echo   ║  Claude Code: 자동 설정 완료             ║
-echo   ║  Cursor: Settings → API Base URL →       ║
-echo   ║    http://localhost:%PROXY_PORT%/v1              ║
-echo   ║                                          ║
-echo   ╚══════════════════════════════════════════╝
+echo   ╔══════════════════════════════════════════════════════╗
+echo   ║                   설치 완료!                         ║
+echo   ╠══════════════════════════════════════════════════════╣
+echo   ║  ① Chrome Extension:                                ║
+echo   ║     chrome://extensions → 개발자 모드                ║
+echo   ║     → %GRIDGE_HOME%\chrome-extension 로드            ║
+echo   ║  ② Claude Code: 새 터미널에서 자동 적용             ║
+echo   ║  ③ Cursor: Settings → API Base URL → localhost:%LOCAL_PORT% ║
+echo   ║  ④ Desktop 앱: CA 인증서 설치 필요                  ║
+echo   ║     node %GRIDGE_HOME%\system-proxy\install-cert.js  ║
+echo   ╚══════════════════════════════════════════════════════╝
 echo.
 pause

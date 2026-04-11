@@ -48,12 +48,24 @@ const SETUP_GUIDES: Record<string, { title: string; icon: React.ReactNode; steps
     title: "로컬 프록시 설치",
     icon: <Terminal className="w-5 h-5" />,
     steps: [
-      "터미널에서 다음 명령어를 실행합니다:\nnpx gridge-proxy --server <서버URL> --key <인증키>",
-      "프록시가 localhost:8080에서 실행됩니다.",
-      "Claude Code 환경변수 설정:\nexport ANTHROPIC_BASE_URL=http://localhost:8080/v1",
-      "Cursor의 경우:\nSettings → Extensions → API Base URL → http://localhost:8080/v1",
+      "통합 설치 스크립트를 다운로드하여 실행합니다. (상단 '한번에 설치하기' 버튼)",
+      "프록시가 localhost:8080에서 자동 실행됩니다.",
+      "Claude Code: 환경변수가 자동 설정됩니다 (새 터미널에서 적용).",
+      "Cursor: Settings → Extensions → API Base URL → http://localhost:8080/v1",
       "설정 후 일반적으로 AI 도구를 사용하면 됩니다.",
       "백엔드에서 프록시 연결을 자동 감지하여 연동이 완료됩니다.",
+    ],
+  },
+  system_proxy: {
+    title: "시스템 프록시 설치 (Desktop 앱)",
+    icon: <Globe className="w-5 h-5" />,
+    steps: [
+      "통합 설치 스크립트를 실행하면 시스템 프록시가 함께 설치됩니다.",
+      "CA 인증서를 시스템에 설치합니다:\nnode ~/.gridge/system-proxy/install-cert.js",
+      "시스템 프록시를 활성화합니다:\nnode ~/.gridge/system-proxy/set-system-proxy.js on",
+      "Chrome을 완전히 종료 후 다시 시작합니다.",
+      "Claude Desktop / ChatGPT Desktop을 사용하면 회사 계정 트래픽만 자동 수집됩니다.",
+      "개인 계정 트래픽은 캡처하지 않습니다 (회사 API Key만 필터링).",
     ],
   },
 };
