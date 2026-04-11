@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Share2, Search, X, Download, Eye } from "lucide-react";
 import clsx from "clsx";
+import type { Team } from "@/types";
+import { teamsApi } from "@/lib/api";
 import { SHARED_FILES } from "@/lib/mockData";
 
 const FILE_TYPE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -16,8 +18,17 @@ const FILE_TYPE_STYLE: Record<string, { bg: string; text: string }> = {
 export default function FilesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
+  const [teamFilter, setTeamFilter] = useState("전체");
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  const fetchTeams = useCallback(async () => {
+    const res = await teamsApi.list();
+    if (res.data) setTeams(res.data.teams);
+  }, []);
+  useEffect(() => { fetchTeams(); }, [fetchTeams]);
 
   const filtered = SHARED_FILES.filter(f => {
+    if (teamFilter !== "전체" && f.creatorTeam !== teamFilter) return false;
     if (statusFilter !== "전체" && f.status !== statusFilter) return false;
     if (search && !f.title.includes(search)) return false;
     return true;
@@ -31,7 +42,21 @@ export default function FilesPage() {
       </div>
 
       {/* 필터 */}
-      <div className="glass rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-3">
+      <div className="glass rounded-2xl p-4 mb-4 space-y-2">
+        {/* 팀 필터 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-gray-500 w-8">팀</span>
+          {["전체", ...teams.map(t => t.name)].map(t => (
+            <button key={t} onClick={() => setTeamFilter(t)}
+              className={clsx("text-xs px-3 py-1.5 rounded-full font-medium transition-colors",
+                teamFilter === t ? "text-white" : "bg-white/60 text-gray-500 hover:bg-white/80")}
+              style={teamFilter === t ? { background: "var(--accent)" } : {}}>
+              {t}
+            </button>
+          ))}
+        </div>
+        {/* 상태 필터 */}
+        <div className="flex flex-wrap items-center gap-3">
         <Share2 className="w-4 h-4 text-gray-400" />
         <div className="flex gap-2">
           {["전체", "공유중", "초안", "만료"].map(s => (
@@ -48,6 +73,7 @@ export default function FilesPage() {
           <input type="text" placeholder="파일명 검색" value={search} onChange={e => setSearch(e.target.value)}
             className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-40" />
           {search && <button onClick={() => setSearch("")}><X className="w-3.5 h-3.5 text-gray-400" /></button>}
+        </div>
         </div>
       </div>
 

@@ -24,3 +24,15 @@ export type RiskAlert = {
   timestamp: string;
   dismissed: boolean;
 };
+
+export type RiskExceptionType = "role_based" | "content_based";
+
+export type RiskException = {
+  id: string;
+  pattern: string;
+  type: RiskExceptionType;
+  role_threshold?: string;     // role_based: "team_lead" | "admin" 등
+  reason: string;
+  created_by: string;
+  created_at: string;
+};
