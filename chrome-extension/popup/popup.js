@@ -3,7 +3,12 @@
 const $ = (id) => document.getElementById(id);
 
 // ── 초기화 ──
-async function init() {
+document.addEventListener("DOMContentLoaded", async () => {
+  // 버튼 이벤트 바인딩 (CSP 때문에 inline onclick 사용 불가)
+  $("saveBtn").addEventListener("click", saveConfig);
+  $("toggleBtn").addEventListener("click", toggleEnabled);
+  $("flushBtn").addEventListener("click", flushNow);
+
   // 저장된 설정 로드
   const config = await chrome.storage.local.get(["serverUrl", "apiKey", "userId", "enabled"]);
   $("serverUrl").value = config.serverUrl || "";
@@ -15,9 +20,9 @@ async function init() {
     if (!res) return;
     updateStatusUI(res.enabled, res.configured);
     $("queueCount").textContent = String(res.queueSize);
-    $("captureCount").textContent = "2"; // Claude + Gemini
+    $("captureCount").textContent = "2";
   });
-}
+});
 
 // ── 상태 UI 업데이트 ──
 function updateStatusUI(enabled, configured) {
@@ -54,15 +59,12 @@ async function saveConfig() {
     return;
   }
 
-  // URL 유효성 체크
-  try {
-    new URL(serverUrl);
-  } catch {
+  try { new URL(serverUrl); } catch {
     showMessage("유효한 URL을 입력하세요.", "error");
     return;
   }
 
-  await chrome.storage.local.set({ serverUrl, apiKey, userId });
+  await chrome.storage.local.set({ serverUrl, apiKey, userId, enabled: true });
   showMessage("설정이 저장되었습니다.", "success");
   updateStatusUI(true, true);
 }
@@ -85,7 +87,6 @@ function flushNow() {
   chrome.runtime.sendMessage({ type: "FLUSH_NOW" }, () => {
     $("flushBtn").textContent = "지금 전송";
     $("flushBtn").disabled = false;
-    // 큐 카운트 업데이트
     chrome.runtime.sendMessage({ type: "GET_STATUS" }, (res) => {
       if (res) $("queueCount").textContent = String(res.queueSize);
     });
@@ -100,11 +101,3 @@ function showMessage(text, type) {
   el.style.display = "block";
   setTimeout(() => { el.style.display = "none"; }, 3000);
 }
-
-// 전역 함수 등록 (onclick에서 사용)
-window.saveConfig = saveConfig;
-window.toggleEnabled = toggleEnabled;
-window.flushNow = flushNow;
-
-// 초기화
-init();

@@ -34,7 +34,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["injected.js"],
+      "resources": ["injected.js", "config.json"],
       "matches": ["https://claude.ai/*", "https://gemini.google.com/*"]
     }
   ]

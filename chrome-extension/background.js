@@ -101,8 +101,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /** 주기적 전송 (30초) */
 setInterval(flushLogs, FLUSH_INTERVAL_MS);
 
-/** 설치 시 초기 설정 */
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ enabled: true });
-  console.log("[Gridge] Extension installed");
+/** 설치 시 config.json에서 사전 설정 로드 */
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const res = await fetch(chrome.runtime.getURL("config.json"));
+    const config = await res.json();
+    // config.json에 값이 있으면 자동 설정 (멤버별 빌드 시 채워짐)
+    if (config.serverUrl && config.apiKey && config.userId) {
+      await chrome.storage.local.set({
+        serverUrl: config.serverUrl,
+        apiKey: config.apiKey,
+        userId: config.userId,
+        enabled: true,
+      });
+      console.log("[Gridge] 사전 설정 로드 완료:", config.userId);
+    } else {
+      await chrome.storage.local.set({ enabled: true });
+      console.log("[Gridge] 수동 설정 필요 (config.json 비어있음)");
+    }
+  } catch {
+    await chrome.storage.local.set({ enabled: true });
+    console.log("[Gridge] config.json 로드 실패, 수동 설정 필요");
+  }
 });
