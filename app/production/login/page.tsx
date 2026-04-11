@@ -29,7 +29,7 @@ export default function LoginPage() {
       } else if (result.role === "admin") {
         router.push("/production/admin");
       } else if (result.role === "team_lead") {
-        router.push("/production/admin/dashboard");
+        router.push("/production/team-lead");
       } else {
         router.push("/production/developer");
       }
