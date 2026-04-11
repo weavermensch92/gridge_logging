@@ -1,0 +1,9 @@
+{
+  "name": "gridge-proxy",
+  "version": "1.0.0",
+  "description": "Gridge AI 로그 수집 로컬 프록시 — Claude Code / Cursor API 인터셉터",
+  "main": "proxy.js",
+  "bin": { "gridge-proxy": "./proxy.js" },
+  "scripts": { "start": "node proxy.js" },
+  "dependencies": {}
+}

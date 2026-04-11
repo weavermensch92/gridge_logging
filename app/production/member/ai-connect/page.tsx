@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Plug, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronRight,
-  Download, Terminal, Globe, ExternalLink, Loader2, RefreshCw,
+  Download, Terminal, Globe, Loader2, RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
 import type { AiToolConnection, AiToolType } from "@/types";
@@ -87,6 +87,100 @@ export default function AiConnectPage() {
     }, 2000);
   };
 
+  /** 개인화된 설치 스크립트 다운로드 (설정이 사전 주입됨) */
+  const downloadInstaller = (type: "sh" | "bat") => {
+    // Mock: 실제로는 백엔드 API가 멤버별 설치 파일을 생성
+    const serverUrl = "https://gridge.company.com";
+    const apiKey = "ext_u001_test";
+    const userId = "u-001";
+
+    let content: string;
+    let filename: string;
+
+    if (type === "sh") {
+      content = `#!/bin/bash
+# Gridge AI Logger 통합 설치 (${userId})
+set -e
+GRIDGE_SERVER="${serverUrl}"
+GRIDGE_API_KEY="${apiKey}"
+GRIDGE_USER_ID="${userId}"
+GRIDGE_HOME="$HOME/.gridge"
+mkdir -p "$GRIDGE_HOME/chrome-extension" "$GRIDGE_HOME/local-proxy"
+
+echo "[1/3] 설정 파일 생성..."
+cat > "$GRIDGE_HOME/chrome-extension/config.json" << 'EOF'
+{"serverUrl":"${serverUrl}","apiKey":"${apiKey}","userId":"${userId}","enabled":true}
+EOF
+cat > "$GRIDGE_HOME/local-proxy/config.json" << 'EOF'
+{"serverUrl":"${serverUrl}","apiKey":"${apiKey}","userId":"${userId}","port":8080}
+EOF
+
+echo "[2/3] 환경변수 설정..."
+SHELL_RC="$HOME/.zshrc"
+[ ! -f "$SHELL_RC" ] && SHELL_RC="$HOME/.bashrc"
+grep -q "ANTHROPIC_BASE_URL" "$SHELL_RC" 2>/dev/null || echo 'export ANTHROPIC_BASE_URL=http://localhost:8080/v1' >> "$SHELL_RC"
+export ANTHROPIC_BASE_URL=http://localhost:8080/v1
+
+echo "[3/3] 소스 다운로드..."
+if command -v git &>/dev/null; then
+  git clone --depth 1 https://github.com/weavermensch92/gridge_logging.git /tmp/gridge_install 2>/dev/null || true
+  cp -r /tmp/gridge_install/chrome-extension/* "$GRIDGE_HOME/chrome-extension/" 2>/dev/null || true
+  cp -r /tmp/gridge_install/local-proxy/* "$GRIDGE_HOME/local-proxy/" 2>/dev/null || true
+  rm -rf /tmp/gridge_install
+fi
+
+echo ""
+echo "✓ 설치 완료!"
+echo "  Chrome: chrome://extensions → 개발자 모드 → $GRIDGE_HOME/chrome-extension 로드"
+echo "  프록시: node $GRIDGE_HOME/local-proxy/proxy.js"
+echo "  Claude Code: ANTHROPIC_BASE_URL 자동 설정됨 (새 터미널에서 적용)"
+`;
+      filename = `gridge-install-${userId}.sh`;
+    } else {
+      content = `@echo off
+chcp 65001 >nul
+title Gridge AI Logger 설치
+set GRIDGE_SERVER=${serverUrl}
+set GRIDGE_API_KEY=${apiKey}
+set GRIDGE_USER_ID=${userId}
+set GRIDGE_HOME=%USERPROFILE%\\.gridge
+mkdir "%GRIDGE_HOME%\\chrome-extension" 2>nul
+mkdir "%GRIDGE_HOME%\\local-proxy" 2>nul
+
+echo [1/3] 설정 파일 생성...
+(echo {"serverUrl":"${serverUrl}","apiKey":"${apiKey}","userId":"${userId}","enabled":true}) > "%GRIDGE_HOME%\\chrome-extension\\config.json"
+(echo {"serverUrl":"${serverUrl}","apiKey":"${apiKey}","userId":"${userId}","port":8080}) > "%GRIDGE_HOME%\\local-proxy\\config.json"
+
+echo [2/3] 환경변수 설정...
+setx ANTHROPIC_BASE_URL "http://localhost:8080/v1" >nul 2>&1
+
+echo [3/3] 소스 다운로드...
+where git >nul 2>&1 && (
+  git clone --depth 1 https://github.com/weavermensch92/gridge_logging.git "%TEMP%\\gridge_install" 2>nul
+  xcopy /s /y /q "%TEMP%\\gridge_install\\chrome-extension\\*" "%GRIDGE_HOME%\\chrome-extension\\" >nul 2>&1
+  xcopy /s /y /q "%TEMP%\\gridge_install\\local-proxy\\*" "%GRIDGE_HOME%\\local-proxy\\" >nul 2>&1
+  rmdir /s /q "%TEMP%\\gridge_install" 2>nul
+)
+
+echo.
+echo ✓ 설치 완료!
+echo   Chrome: chrome://extensions → 개발자 모드 → %GRIDGE_HOME%\\chrome-extension 로드
+echo   프록시: node %GRIDGE_HOME%\\local-proxy\\proxy.js
+echo   Claude Code: ANTHROPIC_BASE_URL 자동 설정됨 (새 터미널에서 적용)
+pause
+`;
+      filename = `gridge-install-${userId}.bat`;
+    }
+
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const connectedCount = connections.filter(c => c.status === "connected").length;
   const actionNeeded = connections.filter(c => c.status === "approved" || c.status === "connecting");
 
@@ -96,6 +190,30 @@ export default function AiConnectPage() {
         <h1 className="text-2xl font-bold text-gray-900">AI 연동</h1>
         <p className="text-sm text-gray-500">허가된 AI 도구를 연동하고 상태를 확인합니다</p>
       </div>
+
+      {/* 통합 설치 배너 */}
+      {actionNeeded.length > 0 && (
+        <div className="glass rounded-2xl p-5 mb-6 border-l-4" style={{ borderLeftColor: "var(--accent)" }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 mb-1">한번에 설치하기</h2>
+              <p className="text-xs text-gray-500">Chrome Extension + 로컬 프록시 + 환경변수를 한번에 설치합니다.</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">개인 설정이 내장되어 추가 설정 없이 바로 사용 가능합니다.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => downloadInstaller("sh")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "var(--accent)" }}>
+                <Download className="w-4 h-4" /> Mac / Linux
+              </button>
+              <button onClick={() => downloadInstaller("bat")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-800 text-white hover:bg-gray-700">
+                <Download className="w-4 h-4" /> Windows
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 요약 */}
       <div className="grid grid-cols-3 gap-4 mb-6">
