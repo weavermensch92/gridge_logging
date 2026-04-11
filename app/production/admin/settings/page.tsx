@@ -5,7 +5,7 @@ import {
   DollarSign, Users, TrendingUp, Check, X, Loader2,
   CreditCard, AlertTriangle, Settings, Building2,
   Bell, Clock, Lock, FileText, Plus, Send,
-  ToggleLeft, ToggleRight, Cpu,
+  ToggleLeft, ToggleRight, Cpu, Crown,
 } from "lucide-react";
 import clsx from "clsx";
 import { orgApi } from "@/lib/api";
@@ -449,6 +449,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* 팀 리드 열람 권한 설정 */}
+          <TeamLeadPermissions />
+
           {/* 감사 로그 */}
           <div className="glass rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -511,6 +514,58 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 팀 리드 열람 권한 설정 컴포넌트 */
+function TeamLeadPermissions() {
+  const [permissions, setPermissions] = useState({
+    view_team_logs: true,
+    view_team_maturity: true,
+    view_team_security: true,
+    manage_ai_toggle: true,
+    view_member_cost: true,
+    view_member_prompt: false,
+    manage_member_add: false,
+  });
+
+  const toggle = (key: keyof typeof permissions) => {
+    setPermissions(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const ITEMS: { key: keyof typeof permissions; label: string; desc: string }[] = [
+    { key: "view_team_logs", label: "팀 AI 로그 열람", desc: "팀원들의 AI 사용 로그를 조회할 수 있습니다" },
+    { key: "view_team_maturity", label: "팀 성숙도 열람", desc: "팀원들의 AIMI 성숙도 점수와 코칭 리포트를 볼 수 있습니다" },
+    { key: "view_team_security", label: "팀 위험 로그 열람", desc: "팀에서 발생한 보안 알림을 확인할 수 있습니다" },
+    { key: "manage_ai_toggle", label: "AI 권한 ON/OFF", desc: "팀원의 AI 사용 권한을 활성/비활성할 수 있습니다" },
+    { key: "view_member_cost", label: "팀원 비용 열람", desc: "팀원별 AI 사용 비용과 한도를 볼 수 있습니다" },
+    { key: "view_member_prompt", label: "프롬프트 내용 열람", desc: "팀원의 프롬프트/응답 전문을 볼 수 있습니다 (민감)" },
+    { key: "manage_member_add", label: "팀원 추가/삭제", desc: "팀장이 직접 팀원을 추가하거나 비활성화할 수 있습니다" },
+  ];
+
+  return (
+    <div className="glass rounded-2xl p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Crown className="w-4 h-4" style={{ color: "var(--accent)" }} />
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">팀 리드 열람 권한</h2>
+      </div>
+      <p className="text-xs text-gray-400 mb-4">팀장(Team Lead)이 각 팀에서 어디까지 열람/관리할 수 있는지 설정합니다. 전체 팀에 동일하게 적용됩니다.</p>
+      <div className="space-y-3">
+        {ITEMS.map(item => (
+          <div key={item.key} className="flex items-center justify-between py-2 border-b border-white/30 last:border-0">
+            <div>
+              <p className="text-sm font-medium text-gray-700">{item.label}</p>
+              <p className="text-xs text-gray-400">{item.desc}</p>
+            </div>
+            <button onClick={() => toggle(item.key)}>
+              {permissions[item.key]
+                ? <ToggleRight className="w-7 h-7 text-green-500" />
+                : <ToggleLeft className="w-7 h-7 text-gray-300" />}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

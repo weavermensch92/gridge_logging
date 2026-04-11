@@ -64,7 +64,7 @@ export default function AiMaturityPage() {
             <tbody>
               {users.map(u => (
                 <tr key={u.userId} className="border-b border-white/50 hover:bg-white/20 transition-colors cursor-pointer"
-                  onClick={() => router.push("/developer/report")}>
+                  onClick={() => router.push(`/production/admin/ai-maturity/${u.userId}`)}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-[10px]"

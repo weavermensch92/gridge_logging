@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   Users, DollarSign, Loader2, UserPlus,
   ToggleLeft, ToggleRight, Trash2, FileText,
-  BarChart3, Shield, ChevronRight,
+  BarChart3, Shield, ChevronRight, Crown,
 } from "lucide-react";
 import clsx from "clsx";
 import type { User, Team, AiToolType, Log, RiskAlert } from "@/types";
@@ -78,6 +78,16 @@ export default function TeamDetailPage() {
   const suspendUser = async (user: User) => {
     if (!confirm(`${user.name}님을 비활성화하시겠습니까?`)) return;
     await usersApi.remove(user.id);
+    fetchData();
+  };
+
+  const assignTeamLead = async (user: User) => {
+    if (!confirm(`${user.name}님을 이 팀의 팀장으로 지정하시겠습니까?`)) return;
+    // 기존 팀장을 member로 변경
+    const currentLead = members.find(m => m.role === "team_lead");
+    if (currentLead) await usersApi.update(currentLead.id, { role: "member" });
+    // 새 팀장 지정
+    await usersApi.update(user.id, { role: "team_lead" });
     fetchData();
   };
 
@@ -174,7 +184,19 @@ export default function TeamDetailPage() {
                     <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.ai_tools.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{AI_TOOL_LABEL[t]}</span>)}</div></td>
                     <td className="px-4 py-3 text-xs"><span className="text-gray-700 font-medium">${user.ai_used_usd.toFixed(1)}</span><span className="text-gray-400"> / ${user.ai_quota_usd}</span></td>
                     <td className="px-4 py-3">{user.onboarding_step !== "complete" && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">{ONBOARDING_LABEL[user.onboarding_step]}</span>}</td>
-                    <td className="px-4 py-3"><button onClick={() => suspendUser(user)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {user.role !== "team_lead" && (
+                          <button onClick={() => assignTeamLead(user)} title="팀장 지정"
+                            className="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors">
+                            <Crown className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => suspendUser(user)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
