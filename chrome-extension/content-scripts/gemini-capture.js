@@ -1,147 +1,243 @@
 /**
- * Gridge AI Logger — Gemini Content Script
+ * Gridge AI Logger — Gemini Content Script (v2)
  *
- * gemini.google.com 페이지에서 프롬프트/응답을 캡처합니다.
- * Claude 캡처와 동일한 패턴이지만, Gemini 고유 DOM 구조에 맞춤.
+ * 이중 캡처 전략:
+ * 1차: fetch 인터셉트 — Gemini의 API 호출 가로채기
+ * 2차: DOM 관찰 — 폴백
  */
 
 (function () {
   "use strict";
 
   const CHANNEL = "gemini";
-  let lastPrompt = "";
-  let lastPromptTime = 0;
-  let isCapturing = false;
+  const CAPTURE_API_PATTERN = /\/api\/generate|BardChatUi|StreamGenerate|_\/BardChatUi/;
+
+  // ═══════════════════════════════════════════════════
+  // 1차: fetch 인터셉트
+  // ═══════════════════════════════════════════════════
+
+  function injectFetchInterceptor() {
+    const script = document.createElement("script");
+    script.textContent = `
+      (function() {
+        const originalFetch = window.fetch;
+
+        window.fetch = async function(...args) {
+          const [url, options] = args;
+          const urlStr = typeof url === "string" ? url : url?.url || "";
+
+          const isGeminiApi = ${CAPTURE_API_PATTERN.toString()}.test(urlStr);
+          if (!isGeminiApi) return originalFetch.apply(this, args);
+
+          let requestBody = null;
+          try {
+            if (options?.body) {
+              requestBody = typeof options.body === "string" ? options.body : null;
+            }
+          } catch {}
+
+          const startTime = Date.now();
+          const response = await originalFetch.apply(this, args);
+          const cloned = response.clone();
+
+          // 응답 수집
+          try {
+            const text = await cloned.text();
+            let prompt = "";
+            let responseText = "";
+
+            // Gemini 응답 파싱 (다양한 포맷 대응)
+            try {
+              // JSON 응답
+              const parsed = JSON.parse(text);
+              if (parsed.candidates) {
+                responseText = parsed.candidates[0]?.content?.parts?.[0]?.text || "";
+              }
+            } catch {
+              // 스트리밍/비표준 응답 — 텍스트에서 추출
+              const textMatches = text.match(/"text":"((?:[^"\\\\]|\\\\.)*)"/g);
+              if (textMatches) {
+                responseText = textMatches
+                  .map(m => m.replace(/"text":"/, "").replace(/"$/, ""))
+                  .join("");
+              }
+            }
+
+            // 요청에서 프롬프트 추출
+            if (requestBody) {
+              try {
+                const reqParsed = JSON.parse(requestBody);
+                if (reqParsed.contents) {
+                  const userParts = reqParsed.contents
+                    .filter(c => c.role === "user")
+                    .flatMap(c => c.parts || [])
+                    .filter(p => p.text)
+                    .map(p => p.text);
+                  prompt = userParts[userParts.length - 1] || "";
+                }
+              } catch {
+                // URL 인코딩 등 다른 포맷
+                const promptMatch = requestBody.match(/(?:prompt|query|input)[=:]([^&]+)/i);
+                if (promptMatch) prompt = decodeURIComponent(promptMatch[1]);
+              }
+            }
+
+            if (prompt && responseText) {
+              window.dispatchEvent(new CustomEvent("__gridge_log__", {
+                detail: {
+                  channel: "${CHANNEL}",
+                  model: "gemini-1.5-pro",
+                  prompt: prompt,
+                  response: responseText,
+                  input_tokens: Math.ceil(prompt.length / 4),
+                  output_tokens: Math.ceil(responseText.length / 4),
+                  cost_usd: 0,
+                  latency_ms: Date.now() - startTime,
+                  mode: "chat",
+                }
+              }));
+            }
+          } catch (err) {
+            console.error("[Gridge] Gemini 응답 수집 오류:", err);
+          }
+
+          return response;
+        };
+
+        console.log("[Gridge] Gemini fetch 인터셉터 주입 완료");
+      })();
+    `;
+    document.documentElement.appendChild(script);
+    script.remove();
+  }
+
+  window.addEventListener("__gridge_log__", (e) => {
+    const payload = e.detail;
+    if (!payload?.prompt || !payload?.response) return;
+    chrome.runtime.sendMessage({
+      type: "LOG_CAPTURED",
+      payload: payload,
+    }, (res) => {
+      if (res) console.log(`[Gridge] Gemini 로그 캡처 (fetch) — 큐 ${res.queueSize}건`);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // 2차: DOM 관찰 (폴백)
+  // ═══════════════════════════════════════════════════
+
+  let domLastPrompt = "";
+  let domLastPromptTime = 0;
+  let domCapturing = false;
 
   function estimateTokens(text) {
     if (!text) return 0;
     const korean = (text.match(/[\uac00-\ud7af]/g) || []).length;
-    const other = text.length - korean;
-    return Math.ceil(korean / 2 + other / 4);
-  }
-
-  function detectModel() {
-    // Gemini UI에서 모델 정보 추출
-    const modelEl = document.querySelector('[data-model-name], [class*="model-name"]');
-    if (modelEl) return modelEl.textContent?.trim() || "gemini-1.5-pro";
-    return "gemini-1.5-pro";
+    return Math.ceil(korean / 2 + (text.length - korean) / 4);
   }
 
   function getPromptInput() {
-    return document.querySelector(
-      'rich-textarea .ql-editor, ' +
-      'div[contenteditable="true"][aria-label*="prompt"], ' +
-      'div[contenteditable="true"][role="textbox"], ' +
-      'textarea[aria-label*="prompt"]'
-    );
+    const selectors = [
+      'rich-textarea .ql-editor',
+      'div[contenteditable="true"][role="textbox"]',
+      'div[contenteditable="true"][aria-label*="prompt"]',
+      'textarea[aria-label*="prompt"]',
+      'div[contenteditable="true"]',
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && el.textContent?.trim()) return el;
+    }
+    return null;
   }
 
   function getLatestResponse() {
-    const responses = document.querySelectorAll(
-      'model-response .response-content, ' +
-      'message-content[class*="model"], ' +
-      '.model-response-text, ' +
-      '[data-message-author-role="model"]'
-    );
-    if (responses.length === 0) return "";
-    return responses[responses.length - 1].textContent?.trim() || "";
+    const selectors = [
+      'model-response .response-content',
+      'message-content.model-response-text',
+      '[data-message-author-role="model"]',
+      '.model-response-text',
+      '[class*="response"][class*="model"]',
+    ];
+    for (const sel of selectors) {
+      const els = document.querySelectorAll(sel);
+      if (els.length > 0) return els[els.length - 1].textContent?.trim() || "";
+    }
+    return "";
   }
 
   function isStreamingComplete() {
-    const streaming = document.querySelector(
-      '.loading-indicator, ' +
-      '[class*="streaming"], ' +
-      'mat-progress-bar, ' +
-      '.response-streaming'
-    );
-    return !streaming;
+    return !document.querySelector('.loading-indicator, [class*="streaming"], mat-progress-bar');
   }
 
-  function sendLog(prompt, response) {
-    if (!prompt || !response) return;
+  function sendDomLog(prompt, response) {
+    if (!prompt || !response || response.length < 10) return;
     chrome.runtime.sendMessage({
       type: "LOG_CAPTURED",
       payload: {
-        channel: CHANNEL,
-        model: detectModel(),
-        prompt,
-        response,
+        channel: CHANNEL, model: "gemini-1.5-pro",
+        prompt, response,
         input_tokens: estimateTokens(prompt),
         output_tokens: estimateTokens(response),
         cost_usd: 0,
-        latency_ms: Date.now() - lastPromptTime,
+        latency_ms: Date.now() - domLastPromptTime,
         mode: "chat",
       },
     }, (res) => {
-      if (res) console.log(`[Gridge] Gemini 로그 큐 등록 (${res.queueSize}건 대기)`);
+      if (res) console.log(`[Gridge] Gemini 로그 캡처 (DOM 폴백) — 큐 ${res.queueSize}건`);
     });
   }
 
-  function setupPromptCapture() {
+  function setupDomCapture() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         const input = getPromptInput();
         if (input && (document.activeElement === input || input.contains(document.activeElement))) {
-          const text = input.textContent?.trim();
-          if (text && text.length > 0) {
-            lastPrompt = text;
-            lastPromptTime = Date.now();
-            isCapturing = true;
-          }
+          domLastPrompt = input.textContent?.trim() || "";
+          domLastPromptTime = Date.now();
+          domCapturing = true;
         }
       }
     }, true);
 
     document.addEventListener("click", (e) => {
-      const button = e.target.closest(
-        'button[aria-label*="Send"], button[aria-label*="submit"], ' +
-        'button[data-testid="send-button"], .send-button'
-      );
-      if (button) {
+      const btn = e.target.closest('button[aria-label*="Send"], button[aria-label*="send"], .send-button');
+      if (btn) {
         const input = getPromptInput();
         if (input) {
-          const text = input.textContent?.trim();
-          if (text && text.length > 0) {
-            lastPrompt = text;
-            lastPromptTime = Date.now();
-            isCapturing = true;
-          }
+          domLastPrompt = input.textContent?.trim() || "";
+          domLastPromptTime = Date.now();
+          domCapturing = true;
         }
       }
     }, true);
-  }
 
-  function setupResponseCapture() {
     let checkTimer = null;
-
     const observer = new MutationObserver(() => {
-      if (!isCapturing) return;
-      if (!isStreamingComplete()) {
-        clearTimeout(checkTimer);
-        checkTimer = setTimeout(() => {
-          if (isStreamingComplete() && isCapturing) {
-            const response = getLatestResponse();
-            if (response && response.length > 10) {
-              sendLog(lastPrompt, response);
-              isCapturing = false;
-            }
+      if (!domCapturing) return;
+      clearTimeout(checkTimer);
+      checkTimer = setTimeout(() => {
+        if (isStreamingComplete() && domCapturing) {
+          const response = getLatestResponse();
+          if (response && response.length > 10) {
+            sendDomLog(domLastPrompt, response);
+            domCapturing = false;
           }
-        }, 1500);
-        return;
-      }
+        }
+      }, 2000);
     });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
+
+  // ═══════════════════════════════════════════════════
+  // 초기화
+  // ═══════════════════════════════════════════════════
 
   function init() {
-    console.log("[Gridge] Gemini 캡처 스크립트 로드됨");
-    setupPromptCapture();
-    setupResponseCapture();
+    console.log("[Gridge] Gemini 캡처 스크립트 v2 로드 (fetch 인터셉트 + DOM 폴백)");
+    injectFetchInterceptor();
+    setupDomCapture();
   }
 
   if (document.readyState === "loading") {
