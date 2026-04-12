@@ -15,10 +15,28 @@
   script.onload = () => script.remove();
   (document.head || document.documentElement).appendChild(script);
 
+  function getUserEmail() {
+    // Claude sidebar bottom user profile area
+    const sidebar = document.querySelector('nav, [role="navigation"]');
+    if (!sidebar) return null;
+    
+    // Look for text matching email pattern
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+    const items = sidebar.querySelectorAll('div, span, button');
+    for (const item of items) {
+      if (emailRegex.test(item.innerText)) {
+        return item.innerText.match(emailRegex)[0];
+      }
+    }
+    return null;
+  }
+
   // ── fetch 인터셉터에서 보낸 로그 수신 → background로 relay ──
   window.addEventListener("__gridge_log__", (e) => {
     const payload = e.detail;
     if (!payload || (!payload.prompt && !payload.response)) return;
+
+    payload.account_id = getUserEmail();
 
     chrome.runtime.sendMessage({ type: "LOG_CAPTURED", payload }, (res) => {
       if (chrome.runtime.lastError) {

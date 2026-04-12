@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gridge AI Logger — Premium Viewer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg: #0b0e14;
+            --surface: #161b22;
+            --surface-hover: #1c2128;
+            --border: #30363d;
+            --primary: #4caf50;
+            --primary-glow: rgba(76, 175, 80, 0.3);
+            --text-main: #e6edf3;
+            --text-dim: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --accent-orange: #ffa657;
+            --danger: #f85149;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            background: var(--bg); color: var(--text-main); 
+            height: 100vh; overflow: hidden; display: flex;
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 280px; background: var(--surface); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .logo { 
+            padding: 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;
+            font-weight: 700; font-size: 20px; letter-spacing: -0.5px;
+        }
+        .logo span { color: var(--primary); text-shadow: 0 0 10px var(--primary-glow); }
+        
+        .nav-section { padding: 20px 16px; flex-grow: 1; }
+        .nav-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 12px; padding-left: 8px; }
+        
+        .stat-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+        .stat-item {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+            padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .stat-item .label { font-size: 12px; color: var(--text-dim); }
+        .stat-item .value { font-weight: 600; color: var(--accent-blue); }
+
+        .filters { display: flex; flex-direction: column; gap: 4px; }
+        .filter-btn {
+            background: transparent; border: none; color: var(--text-dim);
+            padding: 10px 12px; border-radius: 8px; text-align: left; font-size: 14px;
+            cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s;
+        }
+        .filter-btn:hover { background: var(--surface-hover); color: var(--text-main); }
+        .filter-btn.active { background: var(--primary-glow); color: var(--primary); font-weight: 600; }
+
+        .sidebar-footer { padding: 16px; border-top: 1px solid var(--border); }
+        .proxy-status {
+            padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.2);
+            display: flex; align-items: center; gap: 10px; font-size: 12px;
+        }
+        .status-indicator { width: 8px; height: 8px; border-radius: 50%; }
+        .status-indicator.on { background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+        .status-indicator.off { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        /* ── Main Area ── */
+        .main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
+        .top-bar {
+            height: 64px; border-bottom: 1px solid var(--border); padding: 0 24px;
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(11, 14, 20, 0.8); backdrop-filter: blur(10px); z-index: 10;
+        }
+        .search-wrap { display: flex; align-items: center; gap: 12px; flex-grow: 1; max-width: 400px; }
+        .search-input {
+            width: 100%; background: var(--surface); border: 1px solid var(--border);
+            padding: 8px 12px; border-radius: 8px; color: var(--text-main); outline: none; transition: 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2); }
+
+        .table-container { flex-grow: 1; overflow-y: auto; padding: 0 24px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        th { 
+            text-align: left; padding: 12px; color: var(--text-dim); font-size: 12px; 
+            font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+            position: sticky; top: 0; background: var(--bg); z-index: 5;
+        }
+        tr.log-row { cursor: pointer; transition: transform 0.1s, background 0.2s; }
+        tr.log-row:hover { transform: scale(1.002); background: var(--surface); }
+        td { padding: 16px 12px; background: var(--surface); font-size: 14px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        td:first-child { border-left: 1px solid var(--border); border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+        td:last-child { border-right: 1px solid var(--border); border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+
+        .log-time { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+        .log-model { font-weight: 600; color: var(--accent-purple); font-size: 13px; }
+        .channel-badge { 
+            display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; 
+            border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--bg);
+        }
+        .channel-badge.anthropic { color: var(--accent-orange); }
+        .channel-badge.openai { color: var(--accent-blue); }
+        .channel-badge.chrome { color: #f2f2f2; }
+
+        .token-info { display: flex; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .token-in { color: var(--accent-blue); }
+        .token-out { color: var(--accent-orange); }
+        
+        .preview-text { 
+            max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+            color: var(--text-dim); font-size: 13px;
+        }
+
+        /* ── Detail Panel ── */
+        .detail-panel {
+            width: 0; background: var(--surface); border-left: 1px solid var(--border);
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; overflow: hidden;
+            flex-shrink: 0;
+        }
+        .detail-panel.open { width: 500px; }
+        
+        .detail-header { padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .detail-content { padding: 24px; overflow-y: auto; flex-grow: 1; }
+        .detail-section { margin-bottom: 24px; }
+        .section-title { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .code-box {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+            padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6;
+            white-space: pre-wrap; word-break: break-all; color: var(--text-main);
+        }
+
+        .close-btn { 
+            background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text-dim); transition: 0.2s;
+        }
+        .close-btn:hover { color: var(--text-main); border-color: var(--text-dim); }
+
+        /* ── Utilities ── */
+        .empty-state { text-align: center; padding-top: 100px; color: var(--text-dim); }
+        .loading-shimmer {
+            background: linear-gradient(90deg, var(--surface) 25%, var(--border) 50%, var(--surface) 75%);
+            background-size: 400% 100%; animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <span>Gridge</span> AI Logger
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-label">Insights</div>
+            <div class="stat-group">
+                <div class="stat-item">
+                    <span class="label">Today's Logs</span>
+                    <span class="value" id="stat-count">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Total Tokens</span>
+                    <span class="value" id="stat-tokens">0</span>
+                </div>
+            </div>
+
+            <div class="nav-label">Source Filters</div>
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">
+                    <i data-lucide="layout-grid"></i> All Sources
+                </button>
+                <button class="filter-btn" data-filter="anthropic">
+                    <i data-lucide="bird"></i> Claude / Cursor
+                </button>
+                <button class="filter-btn" data-filter="openai">
+                    <i data-lucide="bot"></i> ChatGPT Desktop
+                </button>
+                <button class="filter-btn" data-filter="chrome-extension">
+                    <i data-lucide="globe"></i> Chrome Extension
+                </button>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="proxy-status">
+                <div class="status-indicator" id="proxy-dot"></div>
+                <div id="proxy-text">Proxy Checking...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <div class="top-bar">
+            <div class="search-wrap">
+                <i data-lucide="search" size="18" color="#8b949e"></i>
+                <input type="text" class="search-input" id="search-box" placeholder="Search prompts or models...">
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <label style="font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="auto-refresh" checked> Auto
+                </label>
+                <button class="filter-btn" onclick="loadLogs()" style="border: 1px solid var(--border); padding: 6px 16px;">
+                    <i data-lucide="rotate-cw" size="14"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Time</th>
+                        <th style="width: 120px;">Source</th>
+                        <th style="width: 150px;">Model</th>
+                        <th style="width: 120px;">Tokens</th>
+                        <th>Prompt / Result Preview</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body">
+                    <!-- Logs injected here -->
+                </tbody>
+            </table>
+            <div id="empty-state" class="empty-state" style="display:none">
+                <i data-lucide="layers" size="48" style="margin-bottom:16px;"></i>
+                <p>No activity recorded yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-header">
+            <div style="font-weight:700; font-size:18px;">Log Details</div>
+            <div class="close-btn" onclick="closeDetail()"><i data-lucide="x" size="18"></i></div>
+        </div>
+        <div class="detail-content" id="detail-content">
+            <!-- Content injected here -->
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        let allLogs = [];
+        let activeFilter = 'all';
+        let selectedLogId = null;
+
+        async function loadLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                allLogs = await res.json();
+                renderLogs();
+                updateStats();
+                updateProxyStatus();
+            } catch (e) {
+                console.error("Load failed", e);
+            }
+        }
+
+        async function updateProxyStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const st = await res.json();
+                const dot = document.getElementById('proxy-dot');
+                const txt = document.getElementById('proxy-text');
+                if (st.proxy === 'running') {
+                    dot.className = 'status-indicator on';
+                    txt.textContent = `Proxy Active (:8080)`;
+                } else {
+                    dot.className = 'status-indicator off';
+                    txt.textContent = `Proxy Inactive`;
+                }
+            } catch { }
+        }
+
+        function renderLogs() {
+            const search = document.getElementById('search-box').value.toLowerCase();
+            let filtered = allLogs;
+            
+            if (activeFilter !== 'all') {
+                filtered = filtered.filter(l => (l.channel || '').toLowerCase() === activeFilter);
+            }
+            if (search) {
+                filtered = filtered.filter(l => 
+                    (l.prompt || '').toLowerCase().includes(search) || 
+                    (l.model || '').toLowerCase().includes(search)
+                );
+            }
+
+            // Descending order
+            filtered = [...filtered].reverse();
+
+            const body = document.getElementById('log-body');
+            const empty = document.getElementById('empty-state');
+            
+            if (filtered.length === 0) {
+                body.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+
+            body.innerHTML = filtered.map((log, idx) => {
+                const date = new Date(log.timestamp);
+                const timeStr = date.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const dateStr = date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+                
+                const channel = (log.channel || 'unknown').toLowerCase();
+                const channelIcon = channel.includes('anthropic') ? 'bird' : 
+                                  channel.includes('openai') ? 'bot' : 
+                                  channel.includes('chrome') ? 'globe' : 'zap';
+                const channelName = channel.includes('anthropic') ? 'Claude' : 
+                                   channel.includes('openai') ? 'ChatGPT' : 
+                                   channel.includes('chrome') ? 'Chrome' : 'Unknown';
+
+                const promptPreview = (log.prompt || '').slice(0, 100).replace(/</g, '&lt;');
+
+                return `
+                    <tr class="log-row" onclick="viewDetail(${allLogs.length - 1 - idx})">
+                        <td>
+                            <div class="log-time">
+                                <div style="color:var(--text-main); font-weight:600">${timeStr}</div>
+                                <div>${dateStr}</div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="channel-badge ${channel}">
+                                <i data-lucide="${channelIcon}" size="14"></i> ${channelName}
+                            </div>
+                        </td>
+                        <td class="log-model">${(log.model || 'unknown').split('/').pop()}</td>
+                        <td>
+                            <div class="token-info">
+                                <span class="token-in">${log.input_tokens || 0}</span>
+                                <span style="color:var(--border)">/</span>
+                                <span class="token-out">${log.output_tokens || 0}</span>
+                            </div>
+                        </td>
+                        <td class="preview-text">${promptPreview}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            lucide.createIcons();
+        }
+
+        function updateStats() {
+            document.getElementById('stat-count').textContent = allLogs.length;
+            const tokens = allLogs.reduce((s, l) => s + (l.input_tokens || 0) + (l.output_tokens || 0), 0);
+            document.getElementById('stat-tokens').textContent = tokens > 1000 ? (tokens/1000).toFixed(1) + 'K' : tokens;
+        }
+
+        function viewDetail(originalIndex) {
+            const log = allLogs[originalIndex];
+            const panel = document.getElementById('detail-panel');
+            const content = document.getElementById('detail-content');
+            
+            const prompt = (log.prompt || '').replace(/</g, '&lt;');
+            const response = (log.response || '').replace(/</g, '&lt;');
+
+            content.innerHTML = `
+                <div class="detail-section">
+                    <div class="section-title"><i data-lucide="info" size="14"></i> Metadata</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap">
+                        <div class="channel-badge ${log.channel}">${log.channel}</div>
+                        <div class="channel-badge" style="background:var(--bg)">Model: ${log.model}</div>
+                        <div class="channel-badge" style="background:var(--bg)">Latency: ${log.latency_ms || 0}ms</div>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <div class="section-title"><i data-lucide="message-square" size="14"></i> Prompt</div>
+                    <div class="code-box">${prompt}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="section-title"><i data-lucide="cpu" size="14"></i> AI Response</div>
+                    <div class="code-box" style="border-color:var(--primary-glow)">${response}</div>
+                </div>
+            `;
+            
+            panel.classList.add('open');
+            lucide.createIcons();
+        }
+
+        function closeDetail() {
+            document.getElementById('detail-panel').classList.remove('open');
+        }
+
+        // Search & Filter
+        document.getElementById('search-box').addEventListener('input', renderLogs);
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeFilter = btn.dataset.filter;
+                renderLogs();
+            });
+        });
+
+        // Initialize
+        loadLogs();
+        setInterval(() => {
+            if (document.getElementById('auto-refresh').checked) loadLogs();
+        }, 3000);
+    </script>
+</body>
+</html>

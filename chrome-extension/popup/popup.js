@@ -8,8 +8,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("saveBtn").addEventListener("click", saveConfig);
   $("toggleBtn").addEventListener("click", toggleEnabled);
   $("flushBtn").addEventListener("click", flushNow);
+  $("settingsToggle").addEventListener("click", toggleSettings);
 
-  // 저장된 설정 로드
   const config = await chrome.storage.local.get(["serverUrl", "apiKey", "userId", "enabled"]);
   $("serverUrl").value = config.serverUrl || "";
   $("apiKey").value = config.apiKey || "";
@@ -21,6 +21,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateStatusUI(res.enabled, res.configured);
     $("queueCount").textContent = String(res.queueSize);
     $("captureCount").textContent = "2";
+
+    // 이미 설정되어 있다면 설정창은 닫아두기, 설정 안되어있으면 열어주기
+    if (!res.configured) {
+      $("settingsSection").classList.add("open");
+    }
   });
 });
 
@@ -91,6 +96,11 @@ function flushNow() {
       if (res) $("queueCount").textContent = String(res.queueSize);
     });
   });
+}
+
+// ── 설정창 토글 ──
+function toggleSettings() {
+  $("settingsSection").classList.toggle("open");
 }
 
 // ── 메시지 표시 ──

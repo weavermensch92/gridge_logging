@@ -15,7 +15,14 @@ const FLUSH_INTERVAL_MS = 30_000;
 
 /** 설정 로드 */
 async function getConfig() {
-  const result = await chrome.storage.local.get(["serverUrl", "apiKey", "userId", "enabled"]);
+  let result = await chrome.storage.local.get(["serverUrl", "apiKey", "userId", "enabled"]);
+  
+  // 만약 설정이 비어있으면(빌드 후 첫 실행 등), config.json에서 다시 로드 시도
+  if (!result.serverUrl || !result.apiKey) {
+    const freshConfig = await loadInitialConfig();
+    if (freshConfig) result = freshConfig;
+  }
+
   return {
     serverUrl: result.serverUrl || "",
     apiKey: result.apiKey || "",
@@ -24,21 +31,62 @@ async function getConfig() {
   };
 }
 
-/** 서버로 로그 전송 */
+/** config.json에서 사전 설정 읽기 */
+async function loadInitialConfig() {
+  try {
+    const res = await fetch(chrome.runtime.getURL("config.json"));
+    if (!res.ok) return null;
+    const config = await res.json();
+    if (config.serverUrl && config.apiKey) {
+      await chrome.storage.local.set({
+        serverUrl: config.serverUrl,
+        apiKey: config.apiKey,
+        userId: config.userId || "u-001",
+        enabled: true
+      });
+      console.log("[Gridge] config.json에서 설정 로드:", config.userId);
+      return config;
+    }
+  } catch (e) {
+    console.warn("[Gridge] config.json 로드 실패:", e);
+  }
+  return null;
+}
+
 async function flushLogs() {
   if (LOG_QUEUE.length === 0) return;
 
   const config = await getConfig();
-  if (!config.serverUrl || !config.apiKey || !config.enabled) return;
+  if (!config.enabled) return;
 
   const logsToSend = LOG_QUEUE.splice(0, BATCH_SIZE);
   const rawPayload = {
     logs: logsToSend.map(log => ({
       user_id: config.userId,
       ...log,
+      channel: log.channel || "chrome-extension"
     })),
     api_key: config.apiKey,
   };
+
+  // 1. Try local logging (for local viewer)
+  try {
+    await fetch("http://localhost:8080/api/logs/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rawPayload),
+    });
+    console.log("[Gridge] Local ingestion successful");
+  } catch (e) {
+    // Local proxy might not be running, ignore
+  }
+
+  // 2. Remote logging
+  if (!config.serverUrl || !config.apiKey) {
+    // If no remote server, we are done
+    updateBadge();
+    return;
+  }
 
   try {
     // 암호화 시도 (crypto.js가 로드된 경우)
@@ -57,16 +105,15 @@ async function flushLogs() {
     });
 
     if (!res.ok) {
-      console.error("[Gridge] 로그 전송 실패:", res.status);
+      console.error("[Gridge] Remote 전송 실패:", res.status);
       LOG_QUEUE.unshift(...logsToSend);
     } else {
       const data = await res.json();
-      console.log(`[Gridge] ${data.ingested}건 전송 완료 (암호화)`);
-      // 배지 업데이트
+      console.log(`[Gridge] ${data.ingested || logsToSend.length}건 Remote 전송 완료`);
       updateBadge();
     }
   } catch (err) {
-    console.error("[Gridge] 전송 오류:", err);
+    console.error("[Gridge] Remote 전송 오류:", err);
     LOG_QUEUE.unshift(...logsToSend);
   }
 }
@@ -81,15 +128,28 @@ function updateBadge() {
 /** Content script에서 메시지 수신 */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "LOG_CAPTURED") {
-    LOG_QUEUE.push(message.payload);
-    updateBadge();
+    // Identity Filtering
+    getConfig().then(config => {
+      // If userEmail is configured, verify account_id matching
+      if (config.userEmail && message.payload.account_id) {
+        if (message.payload.account_id.toLowerCase() !== config.userEmail.toLowerCase()) {
+          console.warn("[Gridge] 계정 불일치로 로그 폐기:", message.payload.account_id, "vs", config.userEmail);
+          sendResponse({ status: "ignored", reason: "identity_mismatch" });
+          return;
+        }
+      }
 
-    // 배치 사이즈 도달 시 즉시 전송
-    if (LOG_QUEUE.length >= BATCH_SIZE) {
-      flushLogs();
-    }
+      LOG_QUEUE.push(message.payload);
+      updateBadge();
 
-    sendResponse({ status: "queued", queueSize: LOG_QUEUE.length });
+      // 배치 사이즈 도달 시 즉시 전송
+      if (LOG_QUEUE.length >= BATCH_SIZE) {
+        flushLogs();
+      }
+
+      sendResponse({ status: "queued", queueSize: LOG_QUEUE.length });
+    });
+    return true; // async for getConfig
   }
 
   if (message.type === "GET_STATUS") {
@@ -114,24 +174,6 @@ setInterval(flushLogs, FLUSH_INTERVAL_MS);
 
 /** 설치 시 config.json에서 사전 설정 로드 */
 chrome.runtime.onInstalled.addListener(async () => {
-  try {
-    const res = await fetch(chrome.runtime.getURL("config.json"));
-    const config = await res.json();
-    // config.json에 값이 있으면 자동 설정 (멤버별 빌드 시 채워짐)
-    if (config.serverUrl && config.apiKey && config.userId) {
-      await chrome.storage.local.set({
-        serverUrl: config.serverUrl,
-        apiKey: config.apiKey,
-        userId: config.userId,
-        enabled: true,
-      });
-      console.log("[Gridge] 사전 설정 로드 완료:", config.userId);
-    } else {
-      await chrome.storage.local.set({ enabled: true });
-      console.log("[Gridge] 수동 설정 필요 (config.json 비어있음)");
-    }
-  } catch {
-    await chrome.storage.local.set({ enabled: true });
-    console.log("[Gridge] config.json 로드 실패, 수동 설정 필요");
-  }
+  await loadInitialConfig();
+  await chrome.storage.local.set({ enabled: true });
 });

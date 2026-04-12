@@ -137,6 +137,16 @@ function isCompanyTraffic(headers, body) {
 }
 
 // ── 로그 수집 ──
+// ── 로컬 로그 저장 ──
+const LOGS_DIR = path.join(path.dirname(__dirname), "logs");
+const LOGS_FILE = path.join(LOGS_DIR, "captures.jsonl");
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
+
+function writeLocalLog(entry) {
+  const record = { ...entry, timestamp: new Date().toISOString(), sent_to_server: false };
+  try { fs.appendFileSync(LOGS_FILE, JSON.stringify(record) + "\n"); } catch {}
+}
+
 const LOG_QUEUE = [];
 
 function captureApiLog(hostname, reqHeaders, reqBody, resBody, startTime) {
@@ -210,7 +220,7 @@ function captureApiLog(hostname, reqHeaders, reqBody, resBody, startTime) {
 
     if (!prompt && !response) return;
 
-    LOG_QUEUE.push({
+    const entry = {
       user_id: CONFIG.userId,
       channel,
       model: model || "unknown",
@@ -221,7 +231,10 @@ function captureApiLog(hostname, reqHeaders, reqBody, resBody, startTime) {
       cost_usd: 0,
       latency_ms: Date.now() - startTime,
       mode: "chat",
-    });
+    };
+
+    LOG_QUEUE.push(entry);
+    writeLocalLog(entry);
 
     console.log(`  [캡처] ${channel} | ${model} | ${inputTokens}+${outputTokens} 토큰`);
   } catch (err) {
