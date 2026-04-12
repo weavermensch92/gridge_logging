@@ -88,8 +88,73 @@ export default function UsersPage() {
     fetchUsers();
   };
 
+  // 승인 대기 유저 + AI 도구 승인 대기
+  const pendingApproval = users.filter(u => u.status === "pending_approval");
+  const pendingAiTools = users.filter(u =>
+    u.ai_connections?.some(c => c.status === "pending_approval")
+  );
+
+  const approveUser = async (user: User) => {
+    await usersApi.update(user.id, { status: "invited" } as Record<string, unknown>);
+    fetchUsers();
+  };
+
+  const rejectUser = async (user: User) => {
+    if (!confirm(`${user.name}님의 가입을 거절하시겠습니까?`)) return;
+    await usersApi.remove(user.id);
+    fetchUsers();
+  };
+
   return (
     <div className="p-6 max-w-6xl">
+        {/* 승인 대기 배너 */}
+        {(pendingApproval.length > 0 || pendingAiTools.length > 0) && (
+          <div className="mb-6 space-y-3">
+            {pendingApproval.length > 0 && (
+              <div className="glass rounded-2xl p-4 border-l-4 border-amber-400">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs font-bold text-amber-700 uppercase">가입 승인 대기</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{pendingApproval.length}건</span>
+                </div>
+                <div className="space-y-2">
+                  {pendingApproval.map(u => (
+                    <div key={u.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/40">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-[10px]" style={{ background: "var(--accent)" }}>{u.name[0]}</div>
+                      <div className="flex-1"><p className="text-sm font-medium text-gray-800">{u.name}</p><p className="text-xs text-gray-400">{u.email}</p></div>
+                      <button onClick={() => approveUser(u)} className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: "var(--accent)" }}>승인</button>
+                      <button onClick={() => rejectUser(u)} className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200">거절</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {pendingAiTools.length > 0 && (
+              <div className="glass rounded-2xl p-4 border-l-4" style={{ borderLeftColor: "var(--accent)" }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs font-bold uppercase" style={{ color: "var(--accent)" }}>AI 도구 승인 대기</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">{pendingAiTools.length}건</span>
+                </div>
+                <div className="space-y-2">
+                  {pendingAiTools.map(u => {
+                    const pending = u.ai_connections?.filter(c => c.status === "pending_approval") ?? [];
+                    return (
+                      <div key={u.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/40">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800">{u.name}</p>
+                          <p className="text-xs text-gray-400">신청: {pending.map(c => c.tool).join(", ")}</p>
+                        </div>
+                        <button onClick={() => { usersApi.update(u.id, {}); fetchUsers(); }}
+                          className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: "var(--accent)" }}>승인</button>
+                        <button className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200">거절</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">유저 관리</h1>

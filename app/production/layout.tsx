@@ -2,6 +2,7 @@
 
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { QueryProvider } from "@/lib/query-provider";
+import { ToastProvider } from "@/components/ui/toast";
 
 export default function ProductionLayout({
   children,
@@ -10,7 +11,9 @@ export default function ProductionLayout({
 }) {
   return (
     <QueryProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </AuthProvider>
     </QueryProvider>
   );
 }
