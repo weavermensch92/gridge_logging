@@ -45,3 +45,11 @@ next-env.d.ts
 
 # installer output (멤버별 빌드 결과물)
 installer/output/
+
+# 프록시 설정 (민감 정보 포함 가능)
+local-proxy/config.json
+system-proxy/config.json
+system-proxy/certs/
+
+# 테스트 다운로드
+downloads/test/

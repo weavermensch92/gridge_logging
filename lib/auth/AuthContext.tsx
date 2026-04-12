@@ -20,10 +20,18 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-/** 쿠키 유틸 */
-function setCookie(name: string, value: string, days = 7) {
+/**
+ * 쿠키 유틸
+ *
+ * 보안 참고:
+ * - gridge_session 토큰은 실제로는 서버가 Set-Cookie: HttpOnly; Secure로 설정해야 함
+ * - 클라이언트에서는 gridge_role (비민감) 쿠키만 설정
+ * - 현재 Mock 모드에서는 클라이언트 쿠키 사용 (프로덕션에서는 서버 Set-Cookie로 전환)
+ */
+function setCookie(name: string, value: string, days = 1) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}; SameSite=Lax`;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}; SameSite=Strict${secure}`;
 }
 
 function getCookie(name: string): string | null {

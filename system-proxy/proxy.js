@@ -308,7 +308,20 @@ server.on("connect", (req, clientSocket, head) => {
 
       const headerStr = dataStr.slice(0, headerEnd);
       const headers = parseHeaders(headerStr);
-      const contentLength = parseInt(headers["content-length"] || "0");
+
+      // Request Smuggling 방어
+      if (headers["transfer-encoding"]) {
+        console.error("[보안] Transfer-Encoding 요청 차단 (Request Smuggling 방지)");
+        mitmServer.end();
+        return;
+      }
+      const clHeader = headers["content-length"];
+      const contentLength = clHeader ? parseInt(clHeader, 10) : 0;
+      if (isNaN(contentLength) || contentLength < 0) {
+        console.error("[보안] 비정상 Content-Length 차단:", clHeader);
+        mitmServer.end();
+        return;
+      }
       const bodyStart = headerEnd + 4;
       const bodyEnd = bodyStart + contentLength;
 

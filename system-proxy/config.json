@@ -14,10 +14,7 @@
 
   "captureMode": "company_only",
 
-  "companyApiKeys": [
-    "sk-ant-company-xxxxxxxxxxxx",
-    "sk-proj-company-xxxxxxxxxxxx"
-  ],
+  "companyApiKeys": [],
 
   "companySessionPatterns": [
     "company-session-prefix"

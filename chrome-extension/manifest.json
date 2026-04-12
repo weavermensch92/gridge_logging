@@ -9,8 +9,8 @@
   "host_permissions": [
     "https://claude.ai/*",
     "https://gemini.google.com/*",
-    "*://localhost/*",
-    "*://127.0.0.1/*"
+    "http://localhost:8080/*",
+    "http://localhost:9090/*"
   ],
   "background": {
     "service_worker": "background.js"

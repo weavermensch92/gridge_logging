@@ -101,10 +101,11 @@ export default function AiConnectPage() {
 
   /** 개인화된 설치 스크립트 다운로드 (설정이 사전 주입됨) */
   const downloadInstaller = (type: "sh" | "bat") => {
-    // Mock: 실제로는 백엔드 API가 멤버별 설치 파일을 생성
-    const serverUrl = "https://gridge.company.com";
-    const apiKey = "ext_u001_test";
-    const userId = "u-001";
+    // 실제로는 백엔드 API (GET /api/me/installer-config) 에서 받아옴
+    // Mock: 유저 인증 상태에서 서버가 생성한 일회성 토큰을 사용
+    const serverUrl = window.location.origin; // 현재 접속 서버
+    const apiKey = "GENERATED_BY_SERVER";     // 백엔드가 유저별 생성
+    const userId = "CURRENT_USER_ID";         // 인증된 유저 ID
 
     let content: string;
     let filename: string;
