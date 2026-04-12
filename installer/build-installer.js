@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 /**
- * 멤버별 네이티브 설치 파일 생성기
+ * Gridge AI Logger — Per-member installer generator
  *
- * 출력:
- *   output/Gridge-Setup-{userId}.bat     (Windows — 더블클릭 실행)
- *   output/Gridge-Setup-{userId}.command (macOS — 더블클릭 실행)
+ * Usage:
+ *   node build-installer.js --server URL --key API_KEY --user USER_ID [--company-keys k1,k2]
  *
- * 설치 시:
- *   1. 파일 추출 → ~/.gridge/
- *   2. Chrome Extension 자동 등록 (Chrome 정책)
- *   3. 프록시 시작프로그램 등록
- *   4. 프록시 즉시 실행
- *   5. Chrome 자동 실행 (Extension 로드 상태)
+ * Output:
+ *   output/Gridge-Setup-{userId}.bat     (Windows — double-click, polyglot BAT/PS1)
+ *   output/Gridge-Setup-{userId}.command (macOS   — double-click, bash)
+ *
+ * Windows installer uses a polyglot format:
+ *   BAT section: 5-line ASCII bootstrap that copies self to %TEMP% as .ps1 and runs it
+ *   PS1 section: actual installer logic (UTF-8 safe, colored output, error handling)
  */
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { execSync } = require("child_process");
 
+// ── CLI Args ──
 const args = {};
 process.argv.slice(2).forEach((arg, i, arr) => {
   if (arg.startsWith("--")) args[arg.slice(2)] = arr[i + 1] || "";
@@ -26,17 +28,19 @@ process.argv.slice(2).forEach((arg, i, arr) => {
 const SERVER = args.server || "__GRIDGE_SERVER__";
 const API_KEY = args.key || "__GRIDGE_API_KEY__";
 const USER_ID = args.user || "__GRIDGE_USER_ID__";
+const USER_EMAIL = args.email || "";
 const COMPANY_KEYS = (args["company-keys"] || "").split(",").filter(Boolean);
 
-console.log(`[빌드] 멤버: ${USER_ID}, 서버: ${SERVER}`);
+console.log(`[build] User: ${USER_ID} <${USER_EMAIL}>, Server: ${SERVER}`);
 
-// ── 번들 생성 ──
+// ── Bundle ──
 const ROOT = path.join(__dirname, "..");
 const FILES = [
   "chrome-extension/manifest.json",
   "chrome-extension/background.js",
   "chrome-extension/injected.js",
   "chrome-extension/config.json",
+  "chrome-extension/crypto.js",
   "chrome-extension/content-scripts/claude-capture.js",
   "chrome-extension/content-scripts/gemini-capture.js",
   "chrome-extension/popup/popup.html",
@@ -48,50 +52,283 @@ const FILES = [
   "system-proxy/install-cert.js",
   "system-proxy/set-system-proxy.js",
   "system-proxy/package.json",
+  "lib/crypto.js",
+  "tray-app/gridge-tray.ps1",
+  "tray-app/gridge-tray.vbs",
+  "tray-app/gridge-tray-mac.py",
+  "tray-app/log-viewer.html",
+  "dist/gridge-proxy.exe",
 ];
 
-const tarList = FILES.filter(f => fs.existsSync(path.join(ROOT, f)));
-execSync(`tar czf /tmp/gridge-bundle.tar.gz -C "${ROOT}" ${tarList.join(" ")}`);
-const bundleB64 = fs.readFileSync("/tmp/gridge-bundle.tar.gz").toString("base64");
+const tarList = FILES.filter((f) => fs.existsSync(path.join(ROOT, f)));
+const tmpTar = path.join(os.tmpdir(), "gridge-bundle.tar.gz");
+// Quote each file path to handle special characters or spaces
+const tarFiles = tarList.map(f => `"${f}"`).join(" ");
+execSync(`tar -czf "${tmpTar}" -C "${ROOT}" ${tarFiles}`);
+const bundleB64 = fs.readFileSync(tmpTar).toString("base64");
 
-const extConfig = JSON.stringify({ serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID, enabled: true });
-const proxyConfig = JSON.stringify({ serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID, port: 8080 });
+const extConfig = JSON.stringify({
+  serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID, userEmail: USER_EMAIL, enabled: true,
+});
+const proxyConfig = JSON.stringify({
+  serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID, userEmail: USER_EMAIL, port: 8080,
+});
 const sysConfig = JSON.stringify({
-  port: 9090, serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID,
-  interceptDomains: ["api.anthropic.com","api.openai.com","claude.ai","chatgpt.com","chat.openai.com"],
+  port: 9090, serverUrl: SERVER, apiKey: API_KEY, userId: USER_ID, userEmail: USER_EMAIL,
+  interceptDomains: ["api.anthropic.com", "api.openai.com", "claude.ai", "chatgpt.com", "chat.openai.com"],
   captureMode: "company_only", companyApiKeys: COMPANY_KEYS, companySessionPatterns: [],
 });
 
 const outDir = path.join(__dirname, "output");
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
+// ═══════════════════════════════════════════════════════════════
+// Windows — Polyglot BAT/PS1 installer
+//
+// How it works:
+//   1. Windows runs the .bat extension via cmd.exe
+//   2. cmd.exe sees <# as a label (ignored), runs the @echo off section
+//   3. BAT copies itself to %TEMP%\xxx.ps1 and runs it with PowerShell
+//   4. PowerShell sees <# ... #> as a block comment (BAT section hidden)
+//   5. PowerShell runs the installer logic below the comment
+//
+// This avoids ALL encoding issues because:
+//   - BAT section is pure ASCII (no Korean, no box-drawing chars)
+//   - All logic + display runs in PowerShell which handles UTF-8 natively
+// ═══════════════════════════════════════════════════════════════
+
+// Escape for PowerShell single-quoted strings: ' → ''
+const psEsc = (s) => s.replace(/'/g, "''");
+
+const winLines = [];
+const w = (s = "") => winLines.push(s);
+
+// ── BAT bootstrap (pure ASCII) ──
+w("<# : batch bootstrap");
+w("@echo off");
+w('set "_F=%TEMP%\\gridge-setup-%RANDOM%.ps1"');
+w('copy /y "%~f0" "%_F%" >nul 2>&1');
+w('powershell -ExecutionPolicy Bypass -NoProfile -File "%_F%"');
+w('del "%_F%" >nul 2>&1');
+w("pause");
+w("exit /b");
+w(": end batch #>");
+w();
+
+// ── PowerShell installer ──
+w('$ErrorActionPreference = "Continue"');
+w('$ProgressPreference = "SilentlyContinue"');
+w();
+w('Write-Host ""');
+w('Write-Host "  ========================================" -ForegroundColor Cyan');
+w(`Write-Host "  Gridge AI Logger Setup (${USER_ID})" -ForegroundColor Cyan`);
+w('Write-Host "  ========================================" -ForegroundColor Cyan');
+w('Write-Host ""');
+w();
+w('$GRIDGE = Join-Path $env:USERPROFILE ".gridge"');
+w('$EXT_DIR = Join-Path $GRIDGE "chrome-extension"');
+w();
+
+// Step 1: Cleanup & Extract
+w("# -- [1/6] Cleanup & Extract --");
+w('Write-Host "[1/6] Preparing for installation..." -ForegroundColor Yellow');
+w("try {");
+w('    # Kill existing processes');
+w('    Write-Host "  Stopping existing processes..." -ForegroundColor DarkGray');
+w('    Get-Process | Where-Object { $_.Name -match "node|gridge-proxy" } | Stop-Process -Force -ErrorAction SilentlyContinue');
+w("    Get-WmiObject Win32_Process -Filter \"Name='powershell.exe'\" 2>$null |");
+w('        Where-Object { $_.CommandLine -match "gridge-tray" } |');
+w('        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }');
+w('    Start-Sleep -Seconds 2');
+w();
+w('    Write-Host "  Cleaning up old files..." -ForegroundColor DarkGray');
+w('    if (Test-Path $GRIDGE) {');
+w('        $maxRetries = 3');
+w('        for ($i = 1; $i -le $maxRetries; $i++) {');
+w('            try {');
+w('                Remove-Item -Path $GRIDGE -Recurse -Force -ErrorAction Stop');
+w('                break');
+w('            } catch {');
+w('                if ($i -eq $maxRetries) {');
+w('                    Write-Host "  Warning: Could not fully remove $GRIDGE. Moving it instead." -ForegroundColor Yellow');
+w('                    $oldDir = $GRIDGE + "_old_" + (Get-Date -Format "HHmmss")');
+w('                    Move-Item -Path $GRIDGE -Destination $oldDir -Force -ErrorAction SilentlyContinue');
+w('                } else {');
+w('                    Write-Host "  Retry cleanup ($i/$maxRetries)..." -ForegroundColor DarkGray');
+w('                    Start-Sleep -Seconds 1');
+w('                }');
+w('            }');
+w('        }');
+w('    }');
+w('    New-Item -ItemType Directory -Path $GRIDGE -Force | Out-Null');
+w(`    $bytes = [Convert]::FromBase64String('${bundleB64}')`);
+w('    $tarPath = Join-Path $env:TEMP "gridge-bundle.tar.gz"');
+w('    Write-Host "  Extracting bundle..." -ForegroundColor Yellow');
+w("    [IO.File]::WriteAllBytes($tarPath, $bytes)");
+w();
+w('    # Try tar extraction');
+w('    & "tar.exe" -xzf "$tarPath" -C "$GRIDGE"');
+w('    if ($LASTEXITCODE -ne 0) { ');
+w('        Write-Host "  tar failed, checking for tar.exe..." -ForegroundColor DarkGray');
+w('        if (-not (Get-Command "tar.exe" -ErrorAction SilentlyContinue)) {');
+w('            throw "tar.exe not found in PATH. This installer requires Windows 10 (1803+) or Git for Windows."');
+w('        }');
+w('        throw "tar extraction failed (exit code $LASTEXITCODE). Check if any files in $GRIDGE are open." ');
+w('    }');
+w("    Remove-Item $tarPath -Force -ErrorAction SilentlyContinue");
+w('    Write-Host "  OK ($GRIDGE)" -ForegroundColor Green');
+w("} catch {");
+w('    Write-Host "  FAIL: $_" -ForegroundColor Red');
+w('    Read-Host "  Press Enter to exit"');
+w("    exit 1");
+w("}");
+w();
+
+// Step 2: Config
+w("# -- [2/6] Write config --");
+w('Write-Host "[2/6] Writing config..." -ForegroundColor Yellow');
+w("try {");
+w(`    [IO.File]::WriteAllText((Join-Path $EXT_DIR "config.json"), '${psEsc(extConfig)}')`);
+w(`    [IO.File]::WriteAllText((Join-Path $GRIDGE "local-proxy/config.json"), '${psEsc(proxyConfig)}')`);
+w(`    [IO.File]::WriteAllText((Join-Path $GRIDGE "system-proxy/config.json"), '${psEsc(sysConfig)}')`);
+w('    Write-Host "  OK" -ForegroundColor Green');
+w("} catch {");
+w('    Write-Host "  FAIL: $_" -ForegroundColor Red');
+w("}");
+w();
+
+// Step 3: Chrome Extension policy
+w("# -- [3/6] Chrome Extension policy --");
+w('Write-Host "[3/6] Chrome Extension policy..." -ForegroundColor Yellow');
+w("try {");
+w('    $regPath = "HKCU:\\Software\\Policies\\Google\\Chrome\\ExtensionInstallAllowedTypes"');
+w("    New-Item -Path $regPath -Force -ErrorAction SilentlyContinue | Out-Null");
+w('    Set-ItemProperty -Path $regPath -Name "1" -Value "extension" -Force');
+w('    Write-Host "  OK" -ForegroundColor Green');
+w("} catch {");
+w('    Write-Host "  SKIP: $_" -ForegroundColor DarkYellow');
+w("}");
+w();
+
+// Step 4: Startup registration
+w("# -- [4/6] Startup registration --");
+w('Write-Host "[4/6] Startup registration..." -ForegroundColor Yellow');
+w('$trayVbs = Join-Path $GRIDGE "tray-app/gridge-tray.vbs"');
+w("if (Test-Path $trayVbs) {");
+w('    $startCmd = \'wscript.exe "{0}"\' -f $trayVbs');
+w('    Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" -Name "GridgeProxy" -Value $startCmd -Force');
+w('    Write-Host "  OK (tray app registered)" -ForegroundColor Green');
+w("} else {");
+w("    $nodePath = (Get-Command node -ErrorAction SilentlyContinue).Source");
+w("    if ($nodePath) {");
+w('        $proxyJs = Join-Path $GRIDGE "local-proxy/proxy.js"');
+w("        $startCmd = '\"{0}\" \"{1}\"' -f $nodePath, $proxyJs");
+w('        Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" -Name "GridgeProxy" -Value $startCmd -Force');
+w('        Write-Host "  OK (proxy only)" -ForegroundColor Green');
+w("    } else {");
+w('        Write-Host "  SKIP - install Node.js first" -ForegroundColor Red');
+w("    }");
+w("}");
+w();
+
+// Step 5: Environment variables
+w("# -- [5/6] Environment variables --");
+w('Write-Host "[5/6] Environment variables..." -ForegroundColor Yellow');
+w('[Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "http://localhost:8080/v1", "User")');
+w('$env:ANTHROPIC_BASE_URL = "http://localhost:8080/v1"');
+w('Write-Host "  OK (ANTHROPIC_BASE_URL=http://localhost:8080/v1)" -ForegroundColor Green');
+w();
+
+// Step 6: Start tray app (which manages the proxy)
+w("# -- [6/6] Start tray app --");
+w('Write-Host "[6/6] Starting Gridge tray app..." -ForegroundColor Yellow');
+w('$trayVbs = Join-Path $GRIDGE "tray-app/gridge-tray.vbs"');
+w("if (Test-Path $trayVbs) {");
+w('    Start-Process -FilePath "wscript.exe" -ArgumentList $trayVbs');
+w('    Write-Host "  OK - tray app started (system tray icon)" -ForegroundColor Green');
+w("} else {");
+w('    $exePath = Join-Path $GRIDGE "dist/gridge-proxy.exe"');
+w('    if (-not (Test-Path $exePath)) { $exePath = Join-Path $GRIDGE "gridge-proxy.exe" }');
+w("    if (Test-Path $exePath) {");
+w('        Start-Process -FilePath $exePath -WindowStyle Hidden');
+w('        Write-Host "  OK - proxy started (standalone EXE)" -ForegroundColor Green');
+w("    } else {");
+w("        $nodePath = (Get-Command node -ErrorAction SilentlyContinue).Source");
+w("        if ($nodePath) {");
+w('            $proxyJs = Join-Path $GRIDGE "local-proxy/proxy.js"');
+w("            Start-Process -FilePath $nodePath -ArgumentList $proxyJs -WindowStyle Minimized");
+w('            Write-Host "  OK - proxy started (fallback, node)" -ForegroundColor Green');
+w("        }");
+w("    }");
+w("}");
+w();
+
+// Chrome launch
+w("# Chrome launch");
+w("$chromeExe = $null");
+w("$pf = $env:ProgramFiles");
+w('$pf86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")');
+w('$candidates = @()');
+w('if ($pf)   { $candidates += Join-Path $pf "Google\\Chrome\\Application\\chrome.exe" }');
+w('if ($pf86) { $candidates += Join-Path $pf86 "Google\\Chrome\\Application\\chrome.exe" }');
+w('$chromeExe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1');
+w("if ($chromeExe) {");
+w('    $loadArg = \'--load-extension="{0}"\' -f $EXT_DIR');
+w("    Start-Process -FilePath $chromeExe -ArgumentList $loadArg");
+w('    Write-Host "  OK - Chrome launched with extension" -ForegroundColor Green');
+w("} else {");
+w('    Write-Host "  Chrome not found. Load extension manually:" -ForegroundColor DarkYellow');
+w('    Write-Host "    chrome://extensions > Developer mode > Load unpacked > $EXT_DIR" -ForegroundColor DarkGray');
+w("}");
+w();
+
+// Summary
+w('Write-Host ""');
+w('Write-Host "  ========================================" -ForegroundColor Cyan');
+w('Write-Host "  Installation Complete!" -ForegroundColor Green');
+w('Write-Host "  ========================================" -ForegroundColor Cyan');
+w('Write-Host ""');
+w('Write-Host "  Extension:   Loaded in Chrome" -ForegroundColor White');
+w('Write-Host "  Claude Code: Open new terminal (auto-applied)" -ForegroundColor White');
+w('Write-Host "  Cursor:      Settings > API Base URL > http://localhost:8080/v1" -ForegroundColor White');
+w('Write-Host "  Proxy:       Startup registered (auto-start on boot)" -ForegroundColor White');
+w('Write-Host ""');
+
+const winScript = winLines.join("\r\n");
+const winPath = path.join(outDir, `Gridge-Setup-${USER_ID}.bat`);
+fs.writeFileSync(winPath, winScript, "utf8");
+console.log(`[build] Windows: ${winPath}`);
+
 // ═══════════════════════════════════════════════════════
-// macOS .command (더블클릭 실행, Finder에서 바로 실행됨)
+// macOS .command (bash — double-click in Finder)
 // ═══════════════════════════════════════════════════════
 const macScript = `#!/bin/bash
-# Gridge AI Logger 설치 — ${USER_ID}
-# 이 파일을 더블클릭하면 자동 설치됩니다.
+# Gridge AI Logger Setup — ${USER_ID}
 set -e
 GRIDGE_HOME="$HOME/.gridge"
 EXT_DIR="$GRIDGE_HOME/chrome-extension"
 
 clear
 echo ""
-echo "  ╔══════════════════════════════════════════════╗"
-echo "  ║  Gridge AI Logger 설치 중... (${USER_ID})"
-echo "  ╚══════════════════════════════════════════════╝"
+echo "  Gridge AI Logger Setup (${USER_ID})"
 echo ""
 
-# 1. 파일 추출
-echo "[1/6] 파일 추출..."
+# 1. Cleanup & Extract
+echo "[1/6] Preparing for installation..."
+pkill -f "gridge.*tray" 2>/dev/null || true
+pkill -f "gridge.*proxy\\.js" 2>/dev/null || true
+sleep 1
+
+echo "  Extracting files..."
+rm -rf "$GRIDGE_HOME"
 mkdir -p "$GRIDGE_HOME"
 base64 -d << 'BUNDLE_EOF' | tar xzf - -C "$GRIDGE_HOME"
 ${bundleB64}
 BUNDLE_EOF
-echo "  ✓ 완료"
+echo "  OK"
 
-# 2. 설정 주입
-echo "[2/6] 설정 주입..."
+# 2. Config
+echo "[2/6] Writing config..."
 cat > "$EXT_DIR/config.json" << 'C1'
 ${extConfig}
 C1
@@ -101,61 +338,40 @@ C2
 cat > "$GRIDGE_HOME/system-proxy/config.json" << 'C3'
 ${sysConfig}
 C3
-echo "  ✓ 완료"
+echo "  OK"
 
-# 3. Chrome Extension 자동 등록 (Chrome 정책)
-echo "[3/6] Chrome Extension 등록..."
-# Chrome이 로컬 Extension을 자동 로드하도록 정책 설정
-CHROME_POLICY_DIR="$HOME/Library/Application Support/Google/Chrome/External Extensions"
-mkdir -p "$CHROME_POLICY_DIR"
+# 3. Chrome Extension
+echo "[3/6] Chrome Extension..."
+echo "  Extension path: $EXT_DIR"
 
-# Chrome --load-extension 플래그로 자동 실행하기 위한 설정
-CHROME_PREFS="$HOME/Library/Application Support/Google/Chrome/Default/Preferences"
-echo "  ✓ Extension 경로: $EXT_DIR"
-
-# 4. 시작프로그램 등록 (LaunchAgent)
-echo "[4/6] 시작프로그램 등록..."
+# 4. LaunchAgent
+echo "[4/6] Startup registration..."
 AGENT_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$AGENT_DIR"
-
-# 로컬 프록시 LaunchAgent
-cat > "$AGENT_DIR/com.gridge.local-proxy.plist" << 'PLIST1'
+NODE_PATH=$(which node 2>/dev/null || echo "/usr/local/bin/node")
+cat > "$AGENT_DIR/com.gridge.local-proxy.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.gridge.local-proxy</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/local/bin/node</string>
-    <string>${"${HOME}"}/.gridge/local-proxy/proxy.js</string>
+  <key>Label</key><string>com.gridge.local-proxy</string>
+  <key>ProgramArguments</key><array>
+    <string>$NODE_PATH</string>
+    <string>$GRIDGE_HOME/local-proxy/proxy.js</string>
   </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>${"${HOME}"}/.gridge/local-proxy.log</string>
-  <key>StandardErrorPath</key>
-  <string>${"${HOME}"}/.gridge/local-proxy.err</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$GRIDGE_HOME/local-proxy.log</string>
+  <key>StandardErrorPath</key><string>$GRIDGE_HOME/local-proxy.err</string>
 </dict>
 </plist>
-PLIST1
-
-# node 경로 수정 (실제 경로로)
-NODE_PATH=$(which node 2>/dev/null || echo "/usr/local/bin/node")
-sed -i '' "s|/usr/local/bin/node|$NODE_PATH|g" "$AGENT_DIR/com.gridge.local-proxy.plist" 2>/dev/null || true
-# HOME 치환
-sed -i '' "s|\\${"\\"}\${HOME}|$HOME|g" "$AGENT_DIR/com.gridge.local-proxy.plist" 2>/dev/null || true
-
-# LaunchAgent 로드
+PLIST
 launchctl unload "$AGENT_DIR/com.gridge.local-proxy.plist" 2>/dev/null || true
 launchctl load "$AGENT_DIR/com.gridge.local-proxy.plist" 2>/dev/null || true
-echo "  ✓ com.gridge.local-proxy 등록됨 (재시작 시 자동 실행)"
+echo "  OK"
 
-# 5. 환경변수
-echo "[5/6] 환경변수 설정..."
+# 5. Environment
+echo "[5/6] Environment variables..."
 SHELL_RC="$HOME/.zshrc"
 [ ! -f "$SHELL_RC" ] && SHELL_RC="$HOME/.bashrc"
 if [ -f "$SHELL_RC" ]; then
@@ -166,145 +382,53 @@ export ANTHROPIC_BASE_URL=http://localhost:8080/v1
 ENV
 fi
 export ANTHROPIC_BASE_URL=http://localhost:8080/v1
-echo "  ✓ 완료"
+echo "  OK"
 
-# 6. Chrome 실행 (Extension 자동 로드)
-echo "[6/6] Chrome 실행..."
-pkill -f "gridge.*proxy\\.js" 2>/dev/null || true
-sleep 1
+# 6. Start tray app + Chrome
+echo "[6/6] Starting Gridge tray app..."
 
-# 프록시가 LaunchAgent로 자동 시작되지만, 즉시 시작도 함
-nohup "$NODE_PATH" "$GRIDGE_HOME/local-proxy/proxy.js" > "$GRIDGE_HOME/local-proxy.log" 2>&1 &
+# Try running Mac Tray App (Python) if available
+PYTHON_BIN=$(which python3 2>/dev/null || which python 2>/dev/null)
+if [ -n "$PYTHON_BIN" ] && [ -f "$GRIDGE_HOME/tray-app/gridge-tray-mac.py" ]; then
+  # Try to install dependencies (best effort)
+  "$PYTHON_BIN" -m pip install pystray Pillow --quiet 2>/dev/null || true
+  nohup "$PYTHON_BIN" "$GRIDGE_HOME/tray-app/gridge-tray-mac.py" > "$GRIDGE_HOME/tray-app.log" 2>&1 &
+  echo "  OK - Tray app started (menu bar icon)"
+else
+  nohup "$NODE_PATH" "$GRIDGE_HOME/local-proxy/proxy.js" > "$GRIDGE_HOME/local-proxy.log" 2>&1 &
+  echo "  OK - Dashboard only (tray icon requires Python)"
+fi
 
-# Chrome을 Extension 로드 상태로 실행
 CHROME_APP="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 if [ -f "$CHROME_APP" ]; then
   "$CHROME_APP" --load-extension="$EXT_DIR" &>/dev/null &
-  echo "  ✓ Chrome 실행됨 (Extension 자동 로드)"
+  echo "  OK - Chrome launched with extension"
 else
-  echo "  ⓘ Chrome 경로를 찾을 수 없습니다. 수동으로 Extension을 로드해주세요."
+  echo "  Chrome not found. Load extension manually."
 fi
 
 echo ""
-echo "  ╔══════════════════════════════════════════════╗"
-echo "  ║            설치 완료!                        ║"
-echo "  ╠══════════════════════════════════════════════╣"
-echo "  ║  Extension: Chrome에 자동 로드됨             ║"
-echo "  ║  Claude Code: 새 터미널에서 자동 적용        ║"
-echo "  ║  Cursor: Settings → API Base URL →          ║"
-echo "  ║    http://localhost:8080/v1                  ║"
-echo "  ║  프록시: 시작프로그램으로 등록됨 (자동 실행) ║"
-echo "  ╚══════════════════════════════════════════════╝"
+echo "  ========================================"
+echo "  Installation Complete!"
+echo "  ========================================"
 echo ""
-echo "  이 창을 닫아도 됩니다."
-read -p "  Enter를 누르면 종료..."
+echo "  Extension:   Loaded in Chrome"
+echo "  Claude Code: Open new terminal (auto-applied)"
+echo "  Cursor:      Settings > API Base URL > http://localhost:8080/v1"
+echo "  Proxy:       Startup registered (auto-start on boot)"
+echo ""
+read -p "  Press Enter to close..."
 `;
 
 const macPath = path.join(outDir, `Gridge-Setup-${USER_ID}.command`);
 fs.writeFileSync(macPath, macScript);
-fs.chmodSync(macPath, "755");
-console.log(`[빌드] ✓ macOS: ${macPath}`);
+try { fs.chmodSync(macPath, "755"); } catch {}
+console.log(`[build] macOS:   ${macPath}`);
 
-// ═══════════════════════════════════════════════════════
-// Windows .bat (더블클릭 실행, 관리자 권한 자동 요청)
-// ═══════════════════════════════════════════════════════
-const winScript = `@echo off
-chcp 65001 >nul
-title Gridge AI Logger 설치
-
-echo.
-echo   Gridge AI Logger 설치 중... (${USER_ID})
-echo.
-
-set GRIDGE_HOME=%USERPROFILE%\\.gridge
-set EXT_DIR=%GRIDGE_HOME%\\chrome-extension
-
-REM 1. 파일 추출 (PowerShell 사용)
-echo [1/6] 파일 추출...
-mkdir "%GRIDGE_HOME%" 2>nul
-powershell -Command "$b=[Convert]::FromBase64String((Get-Content '%~f0' | Select-String 'BASE64_START' -Context 0,99999).Context.PostContext -join ''); [IO.File]::WriteAllBytes('%TEMP%\\gridge.tar.gz',$b)" 2>nul
-if exist "%TEMP%\\gridge.tar.gz" (
-  tar xzf "%TEMP%\\gridge.tar.gz" -C "%GRIDGE_HOME%" 2>nul
-  del "%TEMP%\\gridge.tar.gz"
-  echo   ✓ 완료
-) else (
-  echo   PowerShell 추출 실패. 수동 설치가 필요합니다.
-  pause
-  exit /b 1
-)
-
-REM 2. 설정 주입
-echo [2/6] 설정 주입...
-(echo ${extConfig})> "%EXT_DIR%\\config.json"
-(echo ${proxyConfig})> "%GRIDGE_HOME%\\local-proxy\\config.json"
-(echo ${sysConfig.replace(/"/g, '\\"')})> "%GRIDGE_HOME%\\system-proxy\\config.json"
-echo   ✓ 완료
-
-REM 3. Chrome Extension 등록 (레지스트리 정책)
-echo [3/6] Chrome Extension 등록...
-REM Chrome ExtensionSettings 정책으로 로컬 Extension 허용
-reg add "HKCU\\Software\\Policies\\Google\\Chrome\\ExtensionInstallAllowedTypes" /v "1" /t REG_SZ /d "extension" /f >nul 2>&1
-echo   ✓ Chrome 정책 등록
-
-REM 4. 시작프로그램 등록
-echo [4/6] 시작프로그램 등록...
-reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "GridgeProxy" /t REG_SZ /d "node \\"%GRIDGE_HOME%\\local-proxy\\proxy.js\\"" /f >nul 2>&1
-echo   ✓ 시작프로그램에 등록됨
-
-REM 5. 환경변수
-echo [5/6] 환경변수 설정...
-setx ANTHROPIC_BASE_URL "http://localhost:8080/v1" >nul 2>&1
-set ANTHROPIC_BASE_URL=http://localhost:8080/v1
-echo   ✓ ANTHROPIC_BASE_URL 설정됨
-
-REM 6. 프록시 시작 + Chrome 실행
-echo [6/6] 프록시 시작 + Chrome 실행...
-where node >nul 2>&1
-if %errorlevel%==0 (
-  taskkill /f /fi "WINDOWTITLE eq Gridge*" >nul 2>&1
-  start "Gridge Proxy" /min node "%GRIDGE_HOME%\\local-proxy\\proxy.js"
-  echo   ✓ 프록시 실행 중
-) else (
-  echo   ✗ Node.js 필요: https://nodejs.org
-)
-
-REM Chrome을 Extension 로드 상태로 실행
-if exist "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" (
-  start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --load-extension="%EXT_DIR%"
-  echo   ✓ Chrome 실행됨 (Extension 자동 로드)
-) else if exist "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" (
-  start "" "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" --load-extension="%EXT_DIR%"
-  echo   ✓ Chrome 실행됨
-) else (
-  echo   ⓘ Chrome을 찾을 수 없습니다. 수동으로 Extension을 로드해주세요.
-)
-
-echo.
-echo   ╔══════════════════════════════════════════════╗
-echo   ║            설치 완료!                        ║
-echo   ╠══════════════════════════════════════════════╣
-echo   ║  Extension: Chrome에 자동 로드됨             ║
-echo   ║  Claude Code: 새 터미널에서 자동 적용        ║
-echo   ║  Cursor: Settings → API Base URL →          ║
-echo   ║    http://localhost:8080/v1                  ║
-echo   ║  프록시: 시작프로그램으로 등록됨             ║
-echo   ╚══════════════════════════════════════════════╝
-echo.
-pause
-exit /b 0
-
-REM ═══ 내장 번들 (이 아래는 수정 금지) ═══
-:BASE64_START
-${bundleB64}
-`;
-
-const winPath = path.join(outDir, `Gridge-Setup-${USER_ID}.bat`);
-fs.writeFileSync(winPath, winScript);
-console.log(`[빌드] ✓ Windows: ${winPath}`);
-
-try { fs.unlinkSync("/tmp/gridge-bundle.tar.gz"); } catch {}
+// ── Cleanup ──
+try { fs.unlinkSync(tmpTar); } catch {}
 
 console.log("");
-console.log("[빌드] 완료!");
-console.log(`  macOS:   ${macPath} (더블클릭 실행)`);
-console.log(`  Windows: ${winPath} (더블클릭 실행)`);
+console.log("[build] Done!");
+console.log(`  Windows: ${winPath} (double-click to run)`);
+console.log(`  macOS:   ${macPath} (double-click to run)`);

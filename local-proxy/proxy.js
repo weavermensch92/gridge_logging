@@ -28,6 +28,7 @@ let CONFIG = {
   serverUrl: process.env.GRIDGE_SERVER || "",
   apiKey: process.env.GRIDGE_API_KEY || "",
   userId: process.env.GRIDGE_USER_ID || "",
+  userEmail: process.env.GRIDGE_USER_EMAIL || "",
   port: parseInt(process.env.GRIDGE_PROXY_PORT || "8080"),
 };
 
@@ -129,12 +130,36 @@ function mapToolType(name) {
   return "file_read";
 }
 
+// ── 로컬 로그 파일 ──
+const LOGS_DIR = path.join(path.dirname(__dirname), "logs");
+const LOGS_FILE = path.join(LOGS_DIR, "captures.jsonl");
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
+
+function writeLocalLog(entry) {
+  const record = { ...entry, timestamp: new Date().toISOString(), sent_to_server: false };
+  try { fs.appendFileSync(LOGS_FILE, JSON.stringify(record) + "\n"); } catch {}
+}
+
+function markLogsSent(count) {
+  // Best-effort: mark recent entries as sent
+  try {
+    const lines = fs.readFileSync(LOGS_FILE, "utf8").trim().split("\n").filter(Boolean);
+    const updated = lines.map((line, i) => {
+      if (i >= lines.length - count) {
+        try { const obj = JSON.parse(line); obj.sent_to_server = true; return JSON.stringify(obj); } catch { return line; }
+      }
+      return line;
+    });
+    fs.writeFileSync(LOGS_FILE, updated.join("\n") + "\n");
+  } catch {}
+}
+
 // ── 로그 전송 ──
 const LOG_QUEUE = [];
 const FLUSH_INTERVAL = 10_000;
 
 function sendLog(prompt, response, model, inputTokens, outputTokens, latency, mode, agentDetail) {
-  LOG_QUEUE.push({
+  const entry = {
     user_id: CONFIG.userId,
     channel: "anthropic",
     model: model || "claude-sonnet-4",
@@ -146,7 +171,14 @@ function sendLog(prompt, response, model, inputTokens, outputTokens, latency, mo
     latency_ms: latency || 0,
     mode,
     agent_detail: agentDetail || undefined,
-  });
+  };
+  LOG_QUEUE.push(entry);
+  
+  // Only write local log if it matches userEmail (basic privacy filter)
+  // For proxy, account_id might be missing unless injected by extension
+  if (!CONFIG.userEmail || !agentDetail?.account_id || agentDetail.account_id.toLowerCase() === CONFIG.userEmail.toLowerCase()) {
+    writeLocalLog(entry);
+  }
 }
 
 function calculateCost(model, input, output) {
@@ -188,6 +220,7 @@ async function flushQueue() {
         res.on("data", d => data += d);
         res.on("end", () => {
           console.log(`[Gridge Proxy] ${logs.length}건 전송 완료 (암호화: ${encrypted ? "ON" : "OFF"})`);
+          markLogsSent(logs.length);
           resolve();
         });
       });
@@ -206,29 +239,70 @@ setInterval(flushQueue, FLUSH_INTERVAL);
 
 // ── 프록시 서버 ──
 const ANTHROPIC_HOST = "api.anthropic.com";
+const OPENAI_HOST = "api.openai.com";
 
 const server = http.createServer(async (req, res) => {
-  // 요청 본문 수집
+  // CORS 처리
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  // 1. 익스텐션에서 온 로그 수집 API
+  if (req.url === "/api/logs/ingest" && req.method === "POST") {
+    let body = "";
+    req.on("data", c => body += c);
+    req.on("end", () => {
+      try {
+        const data = JSON.parse(body);
+        const logs = data.logs || [data];
+        logs.forEach(log => {
+          LOG_QUEUE.push(log);
+          writeLocalLog(log);
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "ok", count: logs.length }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end("Invalid JSON");
+      }
+    });
+    return;
+  }
+
+  // 2. 일반 프록시 처리 (Claude/OpenAI)
   const chunks = [];
   req.on("data", c => chunks.push(c));
   req.on("end", () => {
     const body = Buffer.concat(chunks);
     const startTime = Date.now();
 
-    // 실제 API로 전달
+    // 호스트 결정
+    let targetHost = ANTHROPIC_HOST;
+    let isAnthropic = true;
+    
+    if (req.url.includes("openai") || req.url.includes("chat/completions")) {
+      targetHost = OPENAI_HOST;
+      isAnthropic = false;
+    }
+
     const options = {
-      hostname: ANTHROPIC_HOST,
+      hostname: targetHost,
       port: 443,
       path: req.url,
       method: req.method,
-      headers: { ...req.headers, host: ANTHROPIC_HOST },
+      headers: { ...req.headers, host: targetHost },
     };
-
+    
+    // Authorization 헤더가 있으면 그대로 전달
     const proxyReq = https.request(options, (proxyRes) => {
-      // 응답 헤더 전달
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
-      // 응답 수집 + 클라이언트에 전달
       const responseChunks = [];
       proxyRes.on("data", (chunk) => {
         responseChunks.push(chunk);
@@ -238,10 +312,11 @@ const server = http.createServer(async (req, res) => {
       proxyRes.on("end", () => {
         res.end();
 
-        // 로그 캡처 (messages 엔드포인트만)
-        if (req.url.includes("/messages") && req.method === "POST") {
+        // 로그 캡처
+        const isTarget = req.url.includes("/messages") || req.url.includes("/chat/completions");
+        if (isTarget && req.method === "POST") {
           try {
-            captureLog(body, Buffer.concat(responseChunks), startTime, proxyRes.headers["content-type"] || "");
+            captureLog(body, Buffer.concat(responseChunks), startTime, proxyRes.headers["content-type"] || "", isAnthropic);
           } catch (e) {
             console.error("[Gridge Proxy] 캡처 오류:", e.message);
           }
@@ -260,63 +335,85 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-function captureLog(reqBuffer, resBuffer, startTime, contentType) {
+function captureLog(reqBuffer, resBuffer, startTime, contentType, isAnthropic) {
   const reqBody = JSON.parse(reqBuffer.toString());
   const resText = resBuffer.toString();
   const latency = Date.now() - startTime;
 
-  // 프롬프트 추출
   let prompt = "";
-  if (reqBody.messages) {
-    const userMsgs = reqBody.messages.filter(m => m.role === "user");
-    const last = userMsgs[userMsgs.length - 1];
-    if (typeof last?.content === "string") prompt = last.content;
-    else if (Array.isArray(last?.content)) prompt = last.content.filter(c => c.type === "text").map(c => c.text).join("\n");
-  }
-
-  // 응답 추출
   let response = "";
   let model = reqBody.model || "";
   let inputTokens = 0;
   let outputTokens = 0;
   let toolUses = [];
 
-  if (contentType.includes("text/event-stream")) {
-    // SSE 스트리밍 응답 파싱
-    for (const line of resText.split("\n")) {
-      if (!line.startsWith("data: ")) continue;
-      const data = line.slice(6).trim();
-      if (data === "[DONE]") continue;
+  if (isAnthropic) {
+    // Anthropic (Claude) parsing logic (existing)
+    if (reqBody.messages) {
+      const userMsgs = reqBody.messages.filter(m => m.role === "user");
+      const last = userMsgs[userMsgs.length - 1];
+      if (typeof last?.content === "string") prompt = last.content;
+      else if (Array.isArray(last?.content)) prompt = last.content.filter(c => c.type === "text").map(c => c.text).join("\n");
+    }
+
+    if (contentType.includes("text/event-stream")) {
+      for (const line of resText.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const p = JSON.parse(data);
+          if (p.model) model = p.model;
+          if (p.type === "content_block_delta" && p.delta?.text) response += p.delta.text;
+          if (p.type === "content_block_start" && p.content_block?.type === "tool_use") {
+            toolUses.push({ id: p.content_block.id, name: p.content_block.name, input: "" });
+          }
+          if (p.type === "content_block_delta" && p.delta?.partial_json) {
+            if (toolUses.length > 0) toolUses[toolUses.length - 1].input += p.delta.partial_json;
+          }
+          if (p.usage) { inputTokens = p.usage.input_tokens || inputTokens; outputTokens = p.usage.output_tokens || outputTokens; }
+          if (p.type === "message_delta" && p.usage) outputTokens = p.usage.output_tokens || outputTokens;
+        } catch { }
+      }
+    } else {
       try {
-        const p = JSON.parse(data);
+        const p = JSON.parse(resText);
         if (p.model) model = p.model;
-        if (p.type === "content_block_delta" && p.delta?.text) response += p.delta.text;
-        if (p.type === "content_block_start" && p.content_block?.type === "tool_use") {
-          toolUses.push({ id: p.content_block.id, name: p.content_block.name, input: "" });
-        }
-        if (p.type === "content_block_delta" && p.delta?.partial_json) {
-          if (toolUses.length > 0) toolUses[toolUses.length - 1].input += p.delta.partial_json;
-        }
-        if (p.usage) { inputTokens = p.usage.input_tokens || inputTokens; outputTokens = p.usage.output_tokens || outputTokens; }
-        if (p.type === "message_delta" && p.usage) outputTokens = p.usage.output_tokens || outputTokens;
-      } catch { /* skip */ }
+        if (p.content) response = p.content.filter(c => c.type === "text").map(c => c.text).join("");
+        if (p.content) toolUses = p.content.filter(c => c.type === "tool_use").map(c => ({ id: c.id, name: c.name, input: c.input }));
+        if (p.usage) { inputTokens = p.usage.input_tokens || 0; outputTokens = p.usage.output_tokens || 0; }
+      } catch { }
     }
   } else {
-    // JSON 응답
-    try {
-      const p = JSON.parse(resText);
-      if (p.model) model = p.model;
-      if (p.content) response = p.content.filter(c => c.type === "text").map(c => c.text).join("");
-      if (p.content) toolUses = p.content.filter(c => c.type === "tool_use").map(c => ({ id: c.id, name: c.name, input: c.input }));
-      if (p.usage) { inputTokens = p.usage.input_tokens || 0; outputTokens = p.usage.output_tokens || 0; }
-    } catch { /* skip */ }
+    // OpenAI (ChatGPT) parsing logic
+    if (reqBody.messages) {
+      const last = reqBody.messages[reqBody.messages.length - 1];
+      prompt = typeof last.content === "string" ? last.content : JSON.stringify(last.content);
+    }
+
+    if (contentType.includes("text/event-stream")) {
+      for (const line of resText.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const p = JSON.parse(data);
+          if (p.choices?.[0]?.delta?.content) response += p.choices[0].delta.content;
+          if (p.usage) { inputTokens = p.usage.prompt_tokens; outputTokens = p.usage.completion_tokens; }
+        } catch { }
+      }
+    } else {
+      try {
+        const p = JSON.parse(resText);
+        if (p.choices?.[0]?.message?.content) response = p.choices[0].message.content;
+        if (p.usage) { inputTokens = p.usage.prompt_tokens; outputTokens = p.usage.completion_tokens; }
+      } catch { }
+    }
   }
 
-  // tool_result 체크 (이전 요청에 에러가 있었는지)
-  const hasToolResult = reqBody.messages?.some(m => Array.isArray(m.content) && m.content.some(c => c.type === "tool_result"));
-  const isError = reqBody.messages?.some(m => Array.isArray(m.content) && m.content.some(c => c.type === "tool_result" && c.is_error));
+  const hasToolResult = reqBody.messages?.some(m => Array.isArray(m.content) && m.content.some(c => c.type === "tool_result" || c.tool_call_id));
+  const isError = false; // Summary placeholder
 
-  // 세션에 추가
   const session = getOrCreateSession();
   session.calls.push({
     prompt, response, model, inputTokens, outputTokens, latency,
@@ -325,7 +422,7 @@ function captureLog(reqBuffer, resBuffer, startTime, contentType) {
     timestamp: new Date().toISOString(),
   });
 
-  console.log(`[Gridge Proxy] 캡처: ${model} | ${inputTokens}+${outputTokens} 토큰 | tool_use: ${toolUses.length}`);
+  console.log(`[Gridge Proxy] 캡처: ${isAnthropic ? "Claude" : "ChatGPT"} | ${model} | ${inputTokens}+${outputTokens} 토큰`);
 }
 
 // ── 시작 ──

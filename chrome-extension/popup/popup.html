@@ -68,15 +68,46 @@
     .stat-card .label { font-size: 10px; color: #999; margin-top: 2px; }
     .msg { font-size: 11px; padding: 8px; border-radius: 6px; margin-top: 8px; text-align: center; }
     .msg.success { background: #ecfdf5; color: #059669; }
+    .msg.success { background: #ecfdf5; color: #059669; }
     .msg.error { background: #fef2f2; color: #dc2626; }
+
+    /* New styles for UI improvement */
+    .settings-toggle {
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; opacity: 0.6; transition: opacity 0.2s;
+    }
+    .settings-toggle:hover { opacity: 1; }
+    .settings-toggle svg { width: 16px; height: 16px; fill: currentColor; }
+    
+    #settingsSection {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out;
+      border-top: 1px solid transparent;
+    }
+    #settingsSection.open {
+      max-height: 400px;
+      margin-top: 10px;
+      border-top: 1px solid #eee;
+    }
+    
+    .premium-badge {
+      font-size: 9px; background: rgba(255,255,255,0.2);
+      padding: 2px 6px; border-radius: 4px; font-weight: 500;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="header-icon">G</div>
-    <div>
-      <h1>Gridge AI Logger</h1>
+    <div style="flex: 1">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <h1>Gridge AI Logger</h1>
+        <span class="premium-badge">ZERO CONFIG</span>
+      </div>
       <p>AI 사용 로그 자동 수집</p>
+    </div>
+    <div class="settings-toggle" id="settingsToggle">
+      <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.91,7.62,6.29L5.23,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.71,8.87 c-0.12,0.21-0.07,0.47,0.12,0.61l2.03,1.58C4.81,11.36,4.79,11.68,4.79,12c0,0.32,0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.21,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
     </div>
   </div>
 
@@ -104,21 +135,23 @@
   </div>
 
   <div class="section">
-    <div class="section-title">서버 연결 설정</div>
-    <div class="field">
-      <label>Gridge 서버 URL</label>
-      <input type="url" id="serverUrl" placeholder="https://gridge.company.com">
+    <div id="settingsSection">
+      <div class="section-title">서버 연결 설정</div>
+      <div class="field">
+        <label>Gridge 서버 URL</label>
+        <input type="url" id="serverUrl" placeholder="https://gridge.company.com">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="text" id="apiKey" placeholder="ext_xxxxx">
+      </div>
+      <div class="field">
+        <label>유저 ID</label>
+        <input type="text" id="userId" placeholder="u-001">
+      </div>
+      <button class="save-btn" id="saveBtn">설정 저장</button>
+      <div id="message" class="msg" style="display:none"></div>
     </div>
-    <div class="field">
-      <label>API Key</label>
-      <input type="text" id="apiKey" placeholder="ext_xxxxx">
-    </div>
-    <div class="field">
-      <label>유저 ID</label>
-      <input type="text" id="userId" placeholder="u-001">
-    </div>
-    <button class="save-btn" id="saveBtn">설정 저장</button>
-    <div id="message" class="msg" style="display:none"></div>
   </div>
 
   <script src="popup.js"></script>
