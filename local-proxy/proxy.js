@@ -129,12 +129,12 @@ function mapToolType(name) {
   return "file_read";
 }
 
-// ── 로그 전송 ──
-const LOG_QUEUE = [];
-const FLUSH_INTERVAL = 10_000;
+// ── 로컬 저장 + 서버 동기화 ──
+const store = require("./local-store");
+const sync = require("./sync");
 
 function sendLog(prompt, response, model, inputTokens, outputTokens, latency, mode, agentDetail) {
-  LOG_QUEUE.push({
+  const log = {
     user_id: CONFIG.userId,
     channel: "anthropic",
     model: model || "claude-sonnet-4",
@@ -146,7 +146,12 @@ function sendLog(prompt, response, model, inputTokens, outputTokens, latency, mo
     latency_ms: latency || 0,
     mode,
     agent_detail: agentDetail || undefined,
-  });
+  };
+
+  // 1. 로컬 SQLite에 즉시 저장 (서버 연결 불필요)
+  const id = store.saveLog(log);
+  const stats = store.getStats();
+  console.log(`[Gridge] 로컬 저장: ${id} | 총 ${stats.total_logs}건 | 미동기화 ${stats.unsynced}건`);
 }
 
 function calculateCost(model, input, output) {
@@ -164,45 +169,10 @@ function calculateCost(model, input, output) {
   return (input / 1000) * 0.003 + (output / 1000) * 0.015;
 }
 
-const { encryptPayload } = require("./crypto.js");
+// flushQueue 제거 — sync.js가 로컬 SQLite에서 서버로 배치 동기화
 
-async function flushQueue() {
-  if (LOG_QUEUE.length === 0 || !CONFIG.serverUrl || !CONFIG.apiKey) return;
-
-  const logs = LOG_QUEUE.splice(0, 20);
-  try {
-    const rawPayload = { logs, api_key: CONFIG.apiKey };
-
-    // 암호화 (서버 공개키가 있으면 암호화, 없으면 평문)
-    const { encrypted, payload } = await encryptPayload(rawPayload, CONFIG.serverUrl);
-    const url = new URL("/api/logs/ingest", CONFIG.serverUrl);
-    const body = JSON.stringify(encrypted ? { encrypted: true, ...payload } : payload);
-    const proto = url.protocol === "https:" ? https : http;
-
-    await new Promise((resolve, reject) => {
-      const req = proto.request(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-      }, (res) => {
-        let data = "";
-        res.on("data", d => data += d);
-        res.on("end", () => {
-          console.log(`[Gridge Proxy] ${logs.length}건 전송 완료 (암호화: ${encrypted ? "ON" : "OFF"})`);
-          resolve();
-        });
-      });
-      req.on("error", (e) => {
-        console.error(`[Gridge Proxy] 전송 실패:`, e.message);
-        LOG_QUEUE.unshift(...logs);
-        reject(e);
-      });
-      req.write(body);
-      req.end();
-    });
-  } catch { /* retry on next flush */ }
-}
-
-setInterval(flushQueue, FLUSH_INTERVAL);
+// 서버 동기화 시작 (5분 간격, 서버 오프라인이면 로컬에 계속 쌓임)
+sync.startAutoSync(CONFIG);
 
 // ── 프록시 서버 ──
 const ANTHROPIC_HOST = "api.anthropic.com";
@@ -250,6 +220,26 @@ if (UPSTREAM_PROXY) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // ── 로컬 API (브라우저에서 로그 열람 가능) ──
+  if (req.url === "/gridge/status" && req.method === "GET") {
+    const status = sync.getStatus();
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(status));
+    return;
+  }
+  if (req.url === "/gridge/logs" && req.method === "GET") {
+    const logs = store.queryLogs({ userId: CONFIG.userId, limit: 50 });
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ logs, total: logs.length }));
+    return;
+  }
+  if (req.url === "/gridge/sync" && req.method === "POST") {
+    const result = await sync.syncNow();
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
   // 요청 본문 수집
   const chunks = [];
   req.on("data", c => chunks.push(c));
@@ -387,5 +377,10 @@ server.listen(CONFIG.port, () => {
   console.log("");
   console.log("  Cursor 설정:");
   console.log(`    Settings → API Base URL → http://localhost:${CONFIG.port}/v1`);
+  console.log("");
+  console.log("  로컬 저장: ~/.gridge/logs.db (오프라인 동작)");
+  console.log(`  로컬 API:  http://localhost:${CONFIG.port}/gridge/status`);
+  console.log(`             http://localhost:${CONFIG.port}/gridge/logs`);
+  console.log(`             POST http://localhost:${CONFIG.port}/gridge/sync`);
   console.log("");
 });
