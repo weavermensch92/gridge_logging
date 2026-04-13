@@ -41,8 +41,12 @@ const FILES = [
   "chrome-extension/content-scripts/gemini-capture.js",
   "chrome-extension/popup/popup.html",
   "chrome-extension/popup/popup.js",
+  "chrome-extension/crypto.js",
   "local-proxy/proxy.js",
+  "local-proxy/local-store.js",
+  "local-proxy/sync.js",
   "local-proxy/package.json",
+  "lib/crypto.js",
   "system-proxy/proxy.js",
   "system-proxy/gen-cert.js",
   "system-proxy/install-cert.js",
@@ -103,8 +107,16 @@ ${sysConfig}
 C3
 echo "  ✓ 완료"
 
+# 2.5 의존성 설치 + crypto.js 복사
+echo "  의존성 설치 중..."
+if command -v node &>/dev/null; then
+  cd "$GRIDGE_HOME/local-proxy" && npm install --production 2>/dev/null && echo "  ✓ better-sqlite3 설치 완료" || echo "  ⚠ npm install 실패"
+  cp "$GRIDGE_HOME/lib/crypto.js" "$GRIDGE_HOME/local-proxy/crypto.js" 2>/dev/null || true
+  cd "$HOME"
+fi
+
 # 3. Chrome Extension 자동 등록 (Chrome 정책)
-echo "[3/6] Chrome Extension 등록..."
+echo "[3/7] Chrome Extension 등록..."
 # Chrome이 로컬 Extension을 자동 로드하도록 정책 설정
 CHROME_POLICY_DIR="$HOME/Library/Application Support/Google/Chrome/External Extensions"
 mkdir -p "$CHROME_POLICY_DIR"
@@ -240,8 +252,17 @@ echo [2/6] 설정 주입...
 (echo ${sysConfig.replace(/"/g, '\\"')})> "%GRIDGE_HOME%\\system-proxy\\config.json"
 echo   ✓ 완료
 
+REM 2.5 의존성 설치
+echo   의존성 설치 중...
+where node >nul 2>&1 && (
+  pushd "%GRIDGE_HOME%\\local-proxy"
+  npm install --production 2>nul && echo   ✓ better-sqlite3 설치 완료
+  popd
+  copy "%GRIDGE_HOME%\\lib\\crypto.js" "%GRIDGE_HOME%\\local-proxy\\crypto.js" >nul 2>&1
+)
+
 REM 3. Chrome Extension 등록 (레지스트리 정책)
-echo [3/6] Chrome Extension 등록...
+echo [3/7] Chrome Extension 등록...
 REM Chrome ExtensionSettings 정책으로 로컬 Extension 허용
 reg add "HKCU\\Software\\Policies\\Google\\Chrome\\ExtensionInstallAllowedTypes" /v "1" /t REG_SZ /d "extension" /f >nul 2>&1
 echo   ✓ Chrome 정책 등록

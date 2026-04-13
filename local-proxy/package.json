@@ -5,5 +5,7 @@
   "main": "proxy.js",
   "bin": { "gridge-proxy": "./proxy.js" },
   "scripts": { "start": "node proxy.js" },
-  "dependencies": {}
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  }
 }
