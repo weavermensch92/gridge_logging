@@ -164,7 +164,7 @@ function calculateCost(model, input, output) {
   return (input / 1000) * 0.003 + (output / 1000) * 0.015;
 }
 
-const { encryptPayload } = require("../lib/crypto.js");
+const { encryptPayload } = require("./crypto.js");
 
 async function flushQueue() {
   if (LOG_QUEUE.length === 0 || !CONFIG.serverUrl || !CONFIG.apiKey) return;
@@ -207,6 +207,48 @@ setInterval(flushQueue, FLUSH_INTERVAL);
 // ── 프록시 서버 ──
 const ANTHROPIC_HOST = "api.anthropic.com";
 
+// upstream 프록시 지원 (컨테이너/기업 환경에서 이그레스 프록시 경유)
+const UPSTREAM_PROXY = process.env.GLOBAL_AGENT_HTTP_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
+let upstreamAgent = undefined;
+if (UPSTREAM_PROXY) {
+  try {
+    const proxyUrl = new URL(UPSTREAM_PROXY.split("@").length > 1
+      ? "http://" + UPSTREAM_PROXY.split("@").pop()
+      : UPSTREAM_PROXY);
+    const { createConnection } = require("net");
+    // HTTP CONNECT 터널링 에이전트
+    upstreamAgent = new class extends https.Agent {
+      createConnection(options, callback) {
+        const connectReq = http.request({
+          host: proxyUrl.hostname,
+          port: proxyUrl.port,
+          method: "CONNECT",
+          path: `${options.host}:${options.port}`,
+          headers: (function(){
+            const raw = process.env.GLOBAL_AGENT_HTTP_PROXY || '';
+            const m = raw.match(/:\/\/([^@]+)@/);
+            if(m) return {'Proxy-Authorization':'Basic '+Buffer.from(m[1]).toString('base64')};
+            return {};
+          })(),
+        });
+        connectReq.on("connect", (res, socket) => {
+          if (res.statusCode === 200) {
+            const tlsSocket = require("tls").connect({ ...options, socket, servername: options.host });
+            callback(null, tlsSocket);
+          } else {
+            callback(new Error(`Upstream proxy CONNECT failed: ${res.statusCode}`));
+          }
+        });
+        connectReq.on("error", callback);
+        connectReq.end();
+      }
+    }();
+    console.log(`[Gridge Proxy] Upstream 프록시 감지: ${proxyUrl.hostname}:${proxyUrl.port}`);
+  } catch (e) {
+    console.log(`[Gridge Proxy] Upstream 프록시 파싱 실패: ${e.message}`);
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   // 요청 본문 수집
   const chunks = [];
@@ -222,6 +264,7 @@ const server = http.createServer(async (req, res) => {
       path: req.url,
       method: req.method,
       headers: { ...req.headers, host: ANTHROPIC_HOST },
+      agent: upstreamAgent,  // upstream 프록시 경유 (있으면)
     };
 
     const proxyReq = https.request(options, (proxyRes) => {
