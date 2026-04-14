@@ -1,39 +1,102 @@
-// ================================
-// 조직 / 팀 / 유저
-// ================================
-export const MOCK_ORG = {
-  id: "org-001",
-  name: "Softsquared Inc.",
-};
+import type {
+  Log, AgentDetail, AgentStep, ToolCall, FileChange, ToolCallType,
+  RiskRule, RiskAlert, RiskSeverity, RiskCategory,
+  ReportSummary, SharedFile, FileType, FileStatus,
+} from "@/types";
 
-export const MOCK_TEAMS = ["개발팀", "디자인팀", "기획팀"];
+// Re-export types for backward compatibility
+export type { Log, AgentDetail, AgentStep, ToolCall, FileChange, ToolCallType } from "@/types";
+export type { RiskRule, RiskAlert, RiskSeverity, RiskCategory } from "@/types";
+export type { ReportSummary } from "@/types";
+export type { SharedFile, FileType, FileStatus } from "@/types";
 
-export const MOCK_USERS = [
-  { id: "u-001", name: "강지수", team: "개발팀", role: "member", email: "jisoo@softsquared.com" },
-  { id: "u-002", name: "이민준", team: "개발팀", role: "member", email: "minjun@softsquared.com" },
-  { id: "u-003", name: "박서연", team: "디자인팀", role: "member", email: "seoyeon@softsquared.com" },
-  { id: "u-004", name: "최현우", team: "기획팀", role: "member", email: "hyunwoo@softsquared.com" },
-  { id: "u-005", name: "김태영", team: "개발팀", role: "admin", email: "taeyoung@softsquared.com" },
+// ================================
+// Super Admin → Organization → Team → User 계층 구조
+// ================================
+import type { Organization, Team, User } from "@/types";
+
+/** super_admin이 관리하는 기업 목록 */
+export const MOCK_ORGS: Organization[] = [
+  {
+    id: "org-001", name: "Softsquared Inc.",
+    ai_budget_usd: 1000, billing_cycle: "monthly",
+    admin_id: "u-005", admin_name: "김태영",
+    user_count: 6, team_count: 3, total_used_usd: 342.5,
+    created_at: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "org-002", name: "ABC Corporation",
+    ai_budget_usd: 500, billing_cycle: "monthly",
+    admin_id: undefined, admin_name: undefined,
+    user_count: 0, team_count: 0, total_used_usd: 0,
+    created_at: "2025-09-01T00:00:00Z",
+  },
+];
+
+/** 하위 호환용 단일 기업 참조 */
+export const MOCK_ORG = MOCK_ORGS[0];
+
+export const MOCK_TEAMS: Team[] = [
+  { id: "team-001", org_id: "org-001", name: "개발팀", lead_id: "u-005", lead_name: "김태영", member_count: 3, used_usd: 210.3 },
+  { id: "team-002", org_id: "org-001", name: "디자인팀", lead_id: "u-003", lead_name: "박서연", member_count: 1, used_usd: 78.2 },
+  { id: "team-003", org_id: "org-001", name: "기획팀", member_count: 1, used_usd: 54.0 },
+];
+
+export const MOCK_USERS: User[] = [
+  {
+    id: "u-000", // super_admin: 플랫폼 레벨 — org/team 소속 없음
+    name: "플랫폼 관리자", email: "super@gridge.io", role: "super_admin",
+    status: "active", ai_enabled: false, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
+    onboarding_step: "complete", created_at: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "u-001", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "강지수", email: "jisoo@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["claude_code", "claude_web"], ai_quota_usd: 50, ai_used_usd: 32.4,
+    onboarding_step: "complete", created_at: "2025-06-01T00:00:00Z",
+  },
+  {
+    id: "u-002", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "이민준", email: "minjun@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "cursor"], ai_quota_usd: 50, ai_used_usd: 28.1,
+    onboarding_step: "complete", created_at: "2025-06-15T00:00:00Z",
+  },
+  {
+    id: "u-003", org_id: "org-001", team_id: "team-002", team_name: "디자인팀",
+    name: "박서연", email: "seoyeon@softsquared.com", role: "team_lead",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "gemini_web"], ai_quota_usd: 30, ai_used_usd: 14.8,
+    onboarding_step: "complete", created_at: "2025-07-01T00:00:00Z",
+  },
+  {
+    id: "u-004", org_id: "org-001", team_id: "team-003", team_name: "기획팀",
+    name: "최현우", email: "hyunwoo@softsquared.com", role: "member",
+    status: "active", ai_enabled: true, ai_tools: ["chatgpt", "claude_web"], ai_quota_usd: 30, ai_used_usd: 15.1,
+    onboarding_step: "complete", created_at: "2025-07-15T00:00:00Z",
+  },
+  {
+    id: "u-010", org_id: "org-001", // admin은 특정 팀 소속 없이 기업 전체 관리
+    name: "정우진", email: "woojin@softsquared.com", role: "admin",
+    status: "active", ai_enabled: false, ai_tools: [], ai_quota_usd: 0, ai_used_usd: 0,
+    onboarding_step: "complete", created_at: "2025-02-01T00:00:00Z",
+  },
+  {
+    id: "u-005", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "김태영", email: "taeyoung@softsquared.com", role: "team_lead",
+    status: "active", ai_enabled: true, ai_tools: ["claude_code", "chatgpt"], ai_quota_usd: 80, ai_used_usd: 45.2,
+    onboarding_step: "complete", created_at: "2025-03-01T00:00:00Z",
+  },
+  {
+    id: "u-006", org_id: "org-001", team_id: "team-001", team_name: "개발팀",
+    name: "신입사원", email: "newbie@softsquared.com", role: "member",
+    status: "invited", ai_enabled: false, ai_tools: ["claude_code"], ai_quota_usd: 50, ai_used_usd: 0,
+    onboarding_step: "password_change", created_at: "2025-12-10T00:00:00Z",
+  },
 ];
 
 // ================================
 // 로그 데이터
 // ================================
-export type Log = {
-  id: string;
-  user_id: string;
-  user_name: string;
-  team: string;
-  channel: "anthropic" | "openai" | "gemini" | "extension" | "crawler";
-  model: string;
-  prompt: string;
-  response: string;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-  latency_ms: number;
-  timestamp: string;
-};
+// (타입 정의는 @/types/ 로 분리됨)
 
 export const MOCK_LOGS: Log[] = [
   // ── 2025-12-01 ──────────────────────────────
@@ -331,6 +394,260 @@ export const MOCK_LOGS: Log[] = [
   { id: "log-220", user_id: "u-004", user_name: "최현우", team: "기획팀", channel: "gemini", model: "gemini-1.5-pro", prompt: "오늘 팀 스탠드업 — Gridge 데모 준비 현황 및 블로커 정리", response: "오늘 스탠드업 내용을 정리했습니다...", input_tokens: 186, output_tokens: 680, cost_usd: 3.42, latency_ms: 1890, timestamp: "2026-03-29T11:00:00Z" },
   { id: "log-221", user_id: "u-005", user_name: "김태영", team: "개발팀", channel: "anthropic", model: "claude-sonnet-4", prompt: "Gridge 팀 오늘의 AI 사용 요약 — 비용 효율성 및 주요 활용 사례", response: "오늘의 AI 사용 요약 리포트입니다...", input_tokens: 228, output_tokens: 750, cost_usd: 6.35, latency_ms: 1820, timestamp: "2026-03-29T11:30:00Z" },
   { id: "log-222", user_id: "u-001", user_name: "강지수", team: "개발팀", channel: "anthropic", model: "claude-haiku", prompt: "CSS scroll-timeline API로 스크롤 연동 애니메이션 구현하는 방법", response: "CSS scroll-timeline 애니메이션 구현 방법입니다...", input_tokens: 148, output_tokens: 350, cost_usd: 0.98, latency_ms: 640, timestamp: "2026-03-29T14:00:00Z" },
+
+  // ── Agent Mode Logs ──────────────────────────────
+  {
+    id: "log-agent-001", user_id: "u-001", user_name: "강지수", team: "개발팀",
+    channel: "anthropic", model: "claude-sonnet-4",
+    prompt: "사용자 알림 설정 페이지를 만들어줘. API 라우트 + UI 컴포넌트 + Zustand 스토어까지 전부.",
+    response: "알림 설정 기능을 구현 완료했습니다. 총 6개 파일을 생성/수정했습니다. API 라우트에서 알림 CRUD를 처리하고, Zustand 스토어로 클라이언트 상태를 관리합니다.",
+    input_tokens: 4820, output_tokens: 12400, cost_usd: 48.32, latency_ms: 142000,
+    timestamp: "2026-03-20T09:30:00Z", mode: "agent",
+    agent_detail: {
+      session_id: "ses-001", session_duration_ms: 142000, total_steps: 5, total_tool_calls: 23,
+      files_changed: [
+        { path: "app/api/notifications/route.ts", action: "created", additions: 45, deletions: 0, language: "typescript" },
+        { path: "app/settings/notifications/page.tsx", action: "created", additions: 128, deletions: 0, language: "tsx" },
+        { path: "lib/stores/notificationStore.ts", action: "created", additions: 38, deletions: 0, language: "typescript" },
+        { path: "components/NotificationToggle.tsx", action: "created", additions: 52, deletions: 0, language: "tsx" },
+        { path: "lib/types/notification.ts", action: "created", additions: 22, deletions: 0, language: "typescript" },
+        { path: "app/layout.tsx", action: "modified", additions: 4, deletions: 1, language: "tsx" },
+      ],
+      steps: [
+        { step: 1, phase: "plan", description: "기존 설정 페이지 구조 분석 및 알림 기능 설계",
+          tool_calls: [
+            { id: "tc-001", type: "glob", input: "app/settings/**/*", output_summary: "Found 3 existing setting pages", timestamp: "2026-03-20T09:30:10Z", duration_ms: 120 },
+            { id: "tc-002", type: "file_read", input: "app/settings/page.tsx", output_summary: "Read settings layout (62 lines)", timestamp: "2026-03-20T09:30:15Z", duration_ms: 80 },
+            { id: "tc-003", type: "file_read", input: "lib/types/index.ts", output_summary: "Read existing type definitions", timestamp: "2026-03-20T09:30:20Z", duration_ms: 65 },
+          ], timestamp: "2026-03-20T09:30:10Z" },
+        { step: 2, phase: "execute", description: "알림 타입 정의 및 Zustand 스토어 생성",
+          tool_calls: [
+            { id: "tc-004", type: "file_write", input: "lib/types/notification.ts", output_summary: "Created NotificationType, NotificationPreference types", timestamp: "2026-03-20T09:31:00Z", duration_ms: 200 },
+            { id: "tc-005", type: "file_write", input: "lib/stores/notificationStore.ts", output_summary: "Created useNotificationStore with CRUD actions", timestamp: "2026-03-20T09:31:30Z", duration_ms: 350 },
+          ], timestamp: "2026-03-20T09:31:00Z" },
+        { step: 3, phase: "execute", description: "API 라우트 및 UI 컴포넌트 구현",
+          tool_calls: [
+            { id: "tc-006", type: "file_write", input: "app/api/notifications/route.ts", output_summary: "Created GET/POST/PATCH handlers", timestamp: "2026-03-20T09:32:00Z", duration_ms: 400 },
+            { id: "tc-007", type: "file_write", input: "components/NotificationToggle.tsx", output_summary: "Created toggle component with category groups", timestamp: "2026-03-20T09:32:30Z", duration_ms: 300 },
+            { id: "tc-008", type: "file_write", input: "app/settings/notifications/page.tsx", output_summary: "Created full settings page with form", timestamp: "2026-03-20T09:33:00Z", duration_ms: 500 },
+            { id: "tc-009", type: "edit", input: "app/layout.tsx", output_summary: "Added NotificationProvider to root layout", timestamp: "2026-03-20T09:33:20Z", duration_ms: 150 },
+          ], timestamp: "2026-03-20T09:32:00Z" },
+        { step: 4, phase: "verify", description: "TypeScript 타입 체크 및 빌드 검증",
+          tool_calls: [
+            { id: "tc-010", type: "bash", input: "npx tsc --noEmit", output_summary: "No errors found", timestamp: "2026-03-20T09:34:00Z", duration_ms: 8500 },
+            { id: "tc-011", type: "bash", input: "npm run build", output_summary: "Build succeeded — 12 pages generated", timestamp: "2026-03-20T09:34:30Z", duration_ms: 15000 },
+          ], timestamp: "2026-03-20T09:34:00Z" },
+        { step: 5, phase: "verify", description: "브라우저 렌더링 확인",
+          tool_calls: [
+            { id: "tc-012", type: "bash", input: "curl -s http://localhost:3000/settings/notifications | head -5", output_summary: "Page renders successfully — 200 OK", timestamp: "2026-03-20T09:35:00Z", duration_ms: 1200 },
+          ], timestamp: "2026-03-20T09:35:00Z" },
+      ],
+      code_artifacts: [
+        { filename: "app/api/notifications/route.ts", language: "typescript", snippet: "export async function GET() {\n  const prefs = await db.notification.findMany();\n  return NextResponse.json(prefs);\n}\n\nexport async function PATCH(req: Request) {\n  const body = await req.json();\n  const updated = await db.notification.update({ ... });\n  return NextResponse.json(updated);\n}" },
+        { filename: "lib/stores/notificationStore.ts", language: "typescript", snippet: "export const useNotificationStore = create<NotificationState>((set) => ({\n  preferences: [],\n  loading: false,\n  toggleCategory: (cat) => set((s) => ({ ... })),\n  fetchPreferences: async () => { ... },\n}));" },
+      ],
+      summary: "알림 설정 풀스택 구현: API 라우트(CRUD) + Zustand 스토어 + 설정 UI 페이지 + 토글 컴포넌트. 6개 파일 생성/수정, 빌드 검증 완료.",
+    },
+  },
+  {
+    id: "log-agent-002", user_id: "u-002", user_name: "이민준", team: "개발팀",
+    channel: "anthropic", model: "claude-sonnet-4",
+    prompt: "프로덕션에서 /api/auth/callback 라우트가 간헐적으로 500 에러를 반환하고 있어. 원인 찾아서 수정해줘.",
+    response: "버그를 찾아 수정했습니다. race condition으로 인해 세션 토큰이 만료된 상태에서 refresh가 동시에 호출되는 문제였습니다.",
+    input_tokens: 3200, output_tokens: 8900, cost_usd: 34.15, latency_ms: 98000,
+    timestamp: "2026-03-21T14:20:00Z", mode: "agent",
+    agent_detail: {
+      session_id: "ses-002", session_duration_ms: 98000, total_steps: 4, total_tool_calls: 18,
+      files_changed: [
+        { path: "app/api/auth/callback/route.ts", action: "modified", additions: 12, deletions: 5, language: "typescript" },
+        { path: "lib/auth/session.ts", action: "modified", additions: 18, deletions: 8, language: "typescript" },
+        { path: "lib/auth/__tests__/session.test.ts", action: "created", additions: 45, deletions: 0, language: "typescript" },
+      ],
+      steps: [
+        { step: 1, phase: "plan", description: "에러 로그 및 라우트 코드 분석",
+          tool_calls: [
+            { id: "tc-101", type: "file_read", input: "app/api/auth/callback/route.ts", output_summary: "Read auth callback handler (78 lines)", timestamp: "2026-03-21T14:20:10Z", duration_ms: 90 },
+            { id: "tc-102", type: "grep", input: "refreshToken", output_summary: "Found 8 references across 4 files", timestamp: "2026-03-21T14:20:20Z", duration_ms: 150 },
+            { id: "tc-103", type: "file_read", input: "lib/auth/session.ts", output_summary: "Read session management module (120 lines)", timestamp: "2026-03-21T14:20:30Z", duration_ms: 85 },
+          ], timestamp: "2026-03-21T14:20:10Z" },
+        { step: 2, phase: "execute", description: "세션 refresh 로직에 mutex lock 추가",
+          tool_calls: [
+            { id: "tc-104", type: "edit", input: "lib/auth/session.ts", output_summary: "Added mutex lock around token refresh", timestamp: "2026-03-21T14:21:00Z", duration_ms: 280 },
+            { id: "tc-105", type: "edit", input: "app/api/auth/callback/route.ts", output_summary: "Added error boundary and retry logic", timestamp: "2026-03-21T14:21:30Z", duration_ms: 220 },
+          ], timestamp: "2026-03-21T14:21:00Z" },
+        { step: 3, phase: "verify", description: "유닛 테스트 작성 및 실행",
+          tool_calls: [
+            { id: "tc-106", type: "file_write", input: "lib/auth/__tests__/session.test.ts", output_summary: "Created concurrent refresh test cases", timestamp: "2026-03-21T14:22:00Z", duration_ms: 400 },
+            { id: "tc-107", type: "bash", input: "npx jest lib/auth/__tests__/session.test.ts", output_summary: "5 tests passed, 0 failed", timestamp: "2026-03-21T14:22:30Z", duration_ms: 4200 },
+          ], timestamp: "2026-03-21T14:22:00Z" },
+        { step: 4, phase: "verify", description: "통합 빌드 및 타입 검증",
+          tool_calls: [
+            { id: "tc-108", type: "bash", input: "npx tsc --noEmit", output_summary: "No errors", timestamp: "2026-03-21T14:23:00Z", duration_ms: 7800 },
+          ], timestamp: "2026-03-21T14:23:00Z" },
+      ],
+      code_artifacts: [
+        { filename: "lib/auth/session.ts", language: "typescript", snippet: "const refreshMutex = new Mutex();\n\nexport async function refreshSession(token: string) {\n  return refreshMutex.runExclusive(async () => {\n    const current = await getSession(token);\n    if (!current.isExpired()) return current;\n    return await requestNewToken(current.refreshToken);\n  });\n}" },
+      ],
+      summary: "인증 콜백 500 에러 수정: race condition으로 인한 동시 토큰 refresh 문제. mutex lock 추가 + 테스트 커버리지 확보.",
+    },
+  },
+  {
+    id: "log-agent-003", user_id: "u-005", user_name: "김태영", team: "개발팀",
+    channel: "anthropic", model: "claude-sonnet-4",
+    prompt: "lib/api 디렉토리의 클라이언트 코드를 리팩토링해줘. 중복된 fetch wrapper를 통합하고, 에러 핸들링을 표준화해.",
+    response: "API 클라이언트 리팩토링을 완료했습니다. 4개의 중복 fetch wrapper를 하나의 통합 클라이언트로 교체하고, 표준 에러 핸들링 레이어를 추가했습니다.",
+    input_tokens: 5100, output_tokens: 14200, cost_usd: 55.80, latency_ms: 185000,
+    timestamp: "2026-03-22T10:00:00Z", mode: "agent",
+    agent_detail: {
+      session_id: "ses-003", session_duration_ms: 185000, total_steps: 6, total_tool_calls: 28,
+      files_changed: [
+        { path: "lib/api/client.ts", action: "created", additions: 85, deletions: 0, language: "typescript" },
+        { path: "lib/api/errors.ts", action: "created", additions: 42, deletions: 0, language: "typescript" },
+        { path: "lib/api/users.ts", action: "modified", additions: 12, deletions: 38, language: "typescript" },
+        { path: "lib/api/projects.ts", action: "modified", additions: 10, deletions: 35, language: "typescript" },
+        { path: "lib/api/notifications.ts", action: "modified", additions: 8, deletions: 30, language: "typescript" },
+        { path: "lib/api/analytics.ts", action: "modified", additions: 9, deletions: 32, language: "typescript" },
+        { path: "lib/api/fetchWrapper.ts", action: "deleted", additions: 0, deletions: 45, language: "typescript" },
+      ],
+      steps: [
+        { step: 1, phase: "plan", description: "기존 API 클라이언트 구조 분석 및 중복 패턴 파악",
+          tool_calls: [
+            { id: "tc-201", type: "glob", input: "lib/api/**/*.ts", output_summary: "Found 6 API client files", timestamp: "2026-03-22T10:00:10Z", duration_ms: 100 },
+            { id: "tc-202", type: "file_read", input: "lib/api/users.ts", output_summary: "Read users API (62 lines) — custom fetch wrapper", timestamp: "2026-03-22T10:00:15Z", duration_ms: 70 },
+            { id: "tc-203", type: "file_read", input: "lib/api/projects.ts", output_summary: "Read projects API (58 lines) — duplicated fetch logic", timestamp: "2026-03-22T10:00:20Z", duration_ms: 70 },
+            { id: "tc-204", type: "grep", input: "fetch\\(.*baseUrl", output_summary: "Found 12 duplicated fetch calls", timestamp: "2026-03-22T10:00:30Z", duration_ms: 200 },
+          ], timestamp: "2026-03-22T10:00:10Z" },
+        { step: 2, phase: "execute", description: "통합 API 클라이언트 및 에러 핸들러 생성",
+          tool_calls: [
+            { id: "tc-205", type: "file_write", input: "lib/api/errors.ts", output_summary: "Created ApiError class + error parser", timestamp: "2026-03-22T10:01:00Z", duration_ms: 300 },
+            { id: "tc-206", type: "file_write", input: "lib/api/client.ts", output_summary: "Created unified apiClient with interceptors", timestamp: "2026-03-22T10:01:30Z", duration_ms: 500 },
+          ], timestamp: "2026-03-22T10:01:00Z" },
+        { step: 3, phase: "execute", description: "각 도메인 API 파일을 통합 클라이언트로 마이그레이션",
+          tool_calls: [
+            { id: "tc-207", type: "edit", input: "lib/api/users.ts", output_summary: "Replaced custom fetch with apiClient.get/post", timestamp: "2026-03-22T10:02:00Z", duration_ms: 250 },
+            { id: "tc-208", type: "edit", input: "lib/api/projects.ts", output_summary: "Migrated to apiClient", timestamp: "2026-03-22T10:02:20Z", duration_ms: 220 },
+            { id: "tc-209", type: "edit", input: "lib/api/notifications.ts", output_summary: "Migrated to apiClient", timestamp: "2026-03-22T10:02:40Z", duration_ms: 200 },
+            { id: "tc-210", type: "edit", input: "lib/api/analytics.ts", output_summary: "Migrated to apiClient", timestamp: "2026-03-22T10:03:00Z", duration_ms: 210 },
+          ], timestamp: "2026-03-22T10:02:00Z" },
+        { step: 4, phase: "execute", description: "레거시 fetch wrapper 삭제",
+          tool_calls: [
+            { id: "tc-211", type: "bash", input: "rm lib/api/fetchWrapper.ts", output_summary: "Deleted legacy file", timestamp: "2026-03-22T10:03:20Z", duration_ms: 50 },
+            { id: "tc-212", type: "grep", input: "fetchWrapper", output_summary: "No remaining references found", timestamp: "2026-03-22T10:03:25Z", duration_ms: 180 },
+          ], timestamp: "2026-03-22T10:03:20Z" },
+        { step: 5, phase: "verify", description: "TypeScript 검증",
+          tool_calls: [
+            { id: "tc-213", type: "bash", input: "npx tsc --noEmit", output_summary: "No errors", timestamp: "2026-03-22T10:04:00Z", duration_ms: 8200 },
+          ], timestamp: "2026-03-22T10:04:00Z" },
+        { step: 6, phase: "iterate", description: "에러 타입 가드 추가 (tsc에서 narrowing 경고 발견)",
+          tool_calls: [
+            { id: "tc-214", type: "edit", input: "lib/api/errors.ts", output_summary: "Added isApiError type guard", timestamp: "2026-03-22T10:04:30Z", duration_ms: 180 },
+            { id: "tc-215", type: "bash", input: "npx tsc --noEmit", output_summary: "No errors", timestamp: "2026-03-22T10:04:45Z", duration_ms: 7900 },
+          ], timestamp: "2026-03-22T10:04:30Z" },
+      ],
+      code_artifacts: [
+        { filename: "lib/api/client.ts", language: "typescript", snippet: "class ApiClient {\n  private baseUrl: string;\n  private headers: HeadersInit;\n\n  async get<T>(path: string): Promise<T> {\n    const res = await fetch(`${this.baseUrl}${path}`, {\n      headers: this.headers,\n    });\n    if (!res.ok) throw ApiError.fromResponse(res);\n    return res.json();\n  }\n}\n\nexport const apiClient = new ApiClient({ baseUrl: process.env.API_URL! });" },
+        { filename: "lib/api/errors.ts", language: "typescript", snippet: "export class ApiError extends Error {\n  constructor(\n    public status: number,\n    public code: string,\n    message: string,\n  ) { super(message); }\n\n  static fromResponse(res: Response) { ... }\n}\n\nexport function isApiError(e: unknown): e is ApiError {\n  return e instanceof ApiError;\n}" },
+      ],
+      summary: "API 클라이언트 리팩토링: 4개 중복 fetch wrapper → 1개 통합 클라이언트. 표준 에러 핸들링 추가. 7개 파일 변경, 레거시 코드 삭제.",
+    },
+  },
+  {
+    id: "log-agent-004", user_id: "u-001", user_name: "강지수", team: "개발팀",
+    channel: "openai", model: "gpt-4o",
+    prompt: "GitHub Actions CI/CD 파이프라인 세팅해줘. PR에 lint + test + build 체크, main 머지 시 Vercel 자동 배포.",
+    response: "CI/CD 파이프라인 구성을 완료했습니다. PR 체크 워크플로우와 배포 워크플로우를 분리하여 생성했습니다.",
+    input_tokens: 2800, output_tokens: 7500, cost_usd: 28.40, latency_ms: 76000,
+    timestamp: "2026-03-23T11:00:00Z", mode: "agent",
+    agent_detail: {
+      session_id: "ses-004", session_duration_ms: 76000, total_steps: 4, total_tool_calls: 14,
+      files_changed: [
+        { path: ".github/workflows/ci.yml", action: "created", additions: 52, deletions: 0, language: "yaml" },
+        { path: ".github/workflows/deploy.yml", action: "created", additions: 38, deletions: 0, language: "yaml" },
+        { path: "package.json", action: "modified", additions: 3, deletions: 1, language: "json" },
+      ],
+      steps: [
+        { step: 1, phase: "plan", description: "기존 프로젝트 설정 및 스크립트 분석",
+          tool_calls: [
+            { id: "tc-301", type: "file_read", input: "package.json", output_summary: "Read package.json — scripts: dev, build, lint, test", timestamp: "2026-03-23T11:00:10Z", duration_ms: 60 },
+            { id: "tc-302", type: "glob", input: ".github/**/*", output_summary: "No existing workflows found", timestamp: "2026-03-23T11:00:15Z", duration_ms: 80 },
+          ], timestamp: "2026-03-23T11:00:10Z" },
+        { step: 2, phase: "execute", description: "CI 워크플로우 생성 (lint + test + build)",
+          tool_calls: [
+            { id: "tc-303", type: "bash", input: "mkdir -p .github/workflows", output_summary: "Created directory", timestamp: "2026-03-23T11:01:00Z", duration_ms: 40 },
+            { id: "tc-304", type: "file_write", input: ".github/workflows/ci.yml", output_summary: "Created PR check workflow", timestamp: "2026-03-23T11:01:10Z", duration_ms: 350 },
+          ], timestamp: "2026-03-23T11:01:00Z" },
+        { step: 3, phase: "execute", description: "배포 워크플로우 생성",
+          tool_calls: [
+            { id: "tc-305", type: "file_write", input: ".github/workflows/deploy.yml", output_summary: "Created deploy workflow with Vercel CLI", timestamp: "2026-03-23T11:02:00Z", duration_ms: 300 },
+            { id: "tc-306", type: "edit", input: "package.json", output_summary: "Added ci script combining lint+test+build", timestamp: "2026-03-23T11:02:20Z", duration_ms: 120 },
+          ], timestamp: "2026-03-23T11:02:00Z" },
+        { step: 4, phase: "verify", description: "YAML 문법 검증",
+          tool_calls: [
+            { id: "tc-307", type: "bash", input: "npx yaml-lint .github/workflows/*.yml", output_summary: "2 files validated, no errors", timestamp: "2026-03-23T11:03:00Z", duration_ms: 2100 },
+          ], timestamp: "2026-03-23T11:03:00Z" },
+      ],
+      code_artifacts: [
+        { filename: ".github/workflows/ci.yml", language: "yaml", snippet: "name: CI\non:\n  pull_request:\n    branches: [main]\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: npm ci\n      - run: npm run lint\n      - run: npm test\n      - run: npm run build" },
+      ],
+      summary: "CI/CD 파이프라인 구성: PR 체크(lint+test+build) + main 머지 시 Vercel 자동 배포. 3개 파일 생성/수정.",
+    },
+  },
+  {
+    id: "log-agent-005", user_id: "u-002", user_name: "이민준", team: "개발팀",
+    channel: "anthropic", model: "claude-sonnet-4",
+    prompt: "lib/utils 디렉토리에 있는 유틸 함수들에 대해 테스트 코드를 자동으로 생성해줘. 커버리지 80% 이상 목표.",
+    response: "lib/utils 내 5개 모듈에 대한 테스트 파일을 생성했습니다. 총 32개 테스트 케이스, 커버리지 87% 달성했습니다.",
+    input_tokens: 3600, output_tokens: 11800, cost_usd: 42.50, latency_ms: 125000,
+    timestamp: "2026-03-24T16:00:00Z", mode: "agent",
+    agent_detail: {
+      session_id: "ses-005", session_duration_ms: 125000, total_steps: 4, total_tool_calls: 20,
+      files_changed: [
+        { path: "lib/utils/__tests__/format.test.ts", action: "created", additions: 68, deletions: 0, language: "typescript" },
+        { path: "lib/utils/__tests__/validate.test.ts", action: "created", additions: 55, deletions: 0, language: "typescript" },
+        { path: "lib/utils/__tests__/date.test.ts", action: "created", additions: 42, deletions: 0, language: "typescript" },
+        { path: "lib/utils/__tests__/transform.test.ts", action: "created", additions: 38, deletions: 0, language: "typescript" },
+        { path: "lib/utils/__tests__/crypto.test.ts", action: "created", additions: 30, deletions: 0, language: "typescript" },
+      ],
+      steps: [
+        { step: 1, phase: "plan", description: "유틸리티 모듈 스캔 및 함수 시그니처 분석",
+          tool_calls: [
+            { id: "tc-401", type: "glob", input: "lib/utils/*.ts", output_summary: "Found 5 utility modules", timestamp: "2026-03-24T16:00:10Z", duration_ms: 90 },
+            { id: "tc-402", type: "file_read", input: "lib/utils/format.ts", output_summary: "8 exported functions (formatCurrency, formatDate, ...)", timestamp: "2026-03-24T16:00:15Z", duration_ms: 75 },
+            { id: "tc-403", type: "file_read", input: "lib/utils/validate.ts", output_summary: "6 exported functions (isEmail, isPhone, ...)", timestamp: "2026-03-24T16:00:20Z", duration_ms: 70 },
+            { id: "tc-404", type: "file_read", input: "lib/utils/date.ts", output_summary: "5 exported functions", timestamp: "2026-03-24T16:00:25Z", duration_ms: 65 },
+            { id: "tc-405", type: "file_read", input: "lib/utils/transform.ts", output_summary: "4 exported functions", timestamp: "2026-03-24T16:00:30Z", duration_ms: 60 },
+            { id: "tc-406", type: "file_read", input: "lib/utils/crypto.ts", output_summary: "3 exported functions", timestamp: "2026-03-24T16:00:35Z", duration_ms: 55 },
+          ], timestamp: "2026-03-24T16:00:10Z" },
+        { step: 2, phase: "execute", description: "5개 모듈 테스트 파일 생성",
+          tool_calls: [
+            { id: "tc-407", type: "file_write", input: "lib/utils/__tests__/format.test.ts", output_summary: "Created 10 test cases", timestamp: "2026-03-24T16:01:00Z", duration_ms: 600 },
+            { id: "tc-408", type: "file_write", input: "lib/utils/__tests__/validate.test.ts", output_summary: "Created 8 test cases", timestamp: "2026-03-24T16:01:30Z", duration_ms: 500 },
+            { id: "tc-409", type: "file_write", input: "lib/utils/__tests__/date.test.ts", output_summary: "Created 6 test cases", timestamp: "2026-03-24T16:02:00Z", duration_ms: 450 },
+            { id: "tc-410", type: "file_write", input: "lib/utils/__tests__/transform.test.ts", output_summary: "Created 5 test cases", timestamp: "2026-03-24T16:02:30Z", duration_ms: 400 },
+            { id: "tc-411", type: "file_write", input: "lib/utils/__tests__/crypto.test.ts", output_summary: "Created 3 test cases", timestamp: "2026-03-24T16:03:00Z", duration_ms: 350 },
+          ], timestamp: "2026-03-24T16:01:00Z" },
+        { step: 3, phase: "verify", description: "전체 테스트 실행",
+          tool_calls: [
+            { id: "tc-412", type: "bash", input: "npx jest lib/utils --coverage", output_summary: "32 tests passed, coverage: 87.3%", timestamp: "2026-03-24T16:04:00Z", duration_ms: 6800 },
+          ], timestamp: "2026-03-24T16:04:00Z" },
+        { step: 4, phase: "iterate", description: "커버리지 미달 함수 추가 테스트",
+          tool_calls: [
+            { id: "tc-413", type: "edit", input: "lib/utils/__tests__/crypto.test.ts", output_summary: "Added edge case tests for hash function", timestamp: "2026-03-24T16:04:30Z", duration_ms: 250 },
+            { id: "tc-414", type: "bash", input: "npx jest lib/utils --coverage", output_summary: "34 tests passed, coverage: 91.2%", timestamp: "2026-03-24T16:05:00Z", duration_ms: 7100 },
+          ], timestamp: "2026-03-24T16:04:30Z" },
+      ],
+      code_artifacts: [
+        { filename: "lib/utils/__tests__/format.test.ts", language: "typescript", snippet: "describe('formatCurrency', () => {\n  it('formats KRW with comma separators', () => {\n    expect(formatCurrency(1234567)).toBe('₩1,234,567');\n  });\n  it('handles zero', () => {\n    expect(formatCurrency(0)).toBe('₩0');\n  });\n});" },
+      ],
+      summary: "lib/utils 테스트 자동 생성: 5개 모듈, 34개 테스트 케이스, 커버리지 91.2% 달성. edge case 보강 포함.",
+    },
+  },
+
+  // ── 위험 로그 (보안 감지 대상) ──────────────────────────────
+  { id: "log-risk-001", user_id: "u-001", user_name: "강지수", team: "개발팀", channel: "anthropic", model: "claude-sonnet-4", prompt: "이 API 키를 사용해서 외부 서비스 연동 코드를 작성해줘: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234", response: "API 키를 사용한 연동 코드를 작성했습니다. 하지만 API 키를 코드에 직접 포함하는 것은 보안상 위험합니다...", input_tokens: 280, output_tokens: 650, cost_usd: 5.12, latency_ms: 1450, timestamp: "2026-03-25T09:15:00Z" },
+  { id: "log-risk-002", user_id: "u-004", user_name: "최현우", team: "기획팀", channel: "gemini", model: "gemini-1.5-pro", prompt: "요즘 재밌는 PC 게임 추천해줘. RPG 장르 위주로. 스팀에서 할인하는 것도 알려줘.", response: "최근 인기 RPG 게임을 추천해 드리겠습니다. 1. Baldur's Gate 3 2. Elden Ring...", input_tokens: 85, output_tokens: 420, cost_usd: 1.85, latency_ms: 980, timestamp: "2026-03-25T13:40:00Z" },
+  { id: "log-risk-003", user_id: "u-002", user_name: "이민준", team: "개발팀", channel: "anthropic", model: "claude-sonnet-4", prompt: "ThinkTrace 프로젝트의 내부 아키텍처 다이어그램을 만들어줘. DB 비밀번호는 Prod_DB_p@ss2026! 이고 서버는 internal-api.softsquared.io:8443 에 있어.", response: "ThinkTrace 아키텍처 다이어그램을 생성하겠습니다...", input_tokens: 320, output_tokens: 780, cost_usd: 6.20, latency_ms: 1680, timestamp: "2026-03-26T10:20:00Z" },
+  { id: "log-risk-004", user_id: "u-003", user_name: "박서연", team: "디자인팀", channel: "openai", model: "gpt-4o", prompt: "우리 회사 직원들 연봉 테이블을 정리해줘. 팀장급은 7000만원, 시니어는 5500만원, 주니어는 3800만원 기준으로.", response: "연봉 테이블을 정리해 드리겠습니다...", input_tokens: 150, output_tokens: 380, cost_usd: 2.95, latency_ms: 1100, timestamp: "2026-03-27T15:00:00Z" },
 ];
 
 // ================================
@@ -341,24 +658,7 @@ export const MY_LOGS = MOCK_LOGS.filter(l => l.user_id === "u-001");
 // ================================
 // 평가 히스토리 (강지수 기준)
 // ================================
-export type ReportSummary = {
-  id: string;
-  seq: number;           // 1차, 2차, …
-  date: string;          // "2025.10.25"
-  period: string;        // 평가 기간 레이블
-  level: string;         // "Lv.1~2"
-  levelLabel: string;    // "Reviewer"
-  levelColor: string;    // tailwind bg class
-  project: string;
-  aiTaskCount: number;
-  totalTokens: number;
-  totalCostUsd: number;
-  topGain: string;       // 가장 많이 성장한 역량
-  bottleneck: string;    // 주요 병목
-  keyInsight: string;    // 한줄 인사이트
-  radarScores: { axis: string; score: number }[];  // 5점 만점
-  hasDetail: boolean;    // 상세 리포트 페이지가 있는지
-};
+// (ReportSummary 타입은 @/types/report.ts 로 분리됨)
 
 export const PAST_REPORTS: ReportSummary[] = [
   {
@@ -683,26 +983,7 @@ export const ADMIN_STATS = {
 // ================================
 // 공유 파일 메타데이터
 // ================================
-export type FileType = "PDF" | "XLSX" | "PPTX" | "DOCX" | "CSV";
-export type FileStatus = "공유중" | "초안" | "만료";
-
-export type SharedFile = {
-  id: string;
-  title: string;
-  fileType: FileType;
-  sizeMb: number;
-  creator: string;       // user_name
-  creatorTeam: string;
-  sharedTo: string;      // "전체" | "개발팀" | "디자인팀" | "기획팀" | 특정인
-  status: FileStatus;
-  tags: string[];
-  createdAt: string;     // ISO
-  sharedAt: string;      // ISO
-  updatedAt: string;     // ISO
-  viewCount: number;
-  downloadCount: number;
-  commentCount: number;
-};
+// (FileType, FileStatus, SharedFile 타입은 @/types/file.ts 로 분리됨)
 
 export const SHARED_FILES: SharedFile[] = [
   // ── AI 성숙도 리포트 (PDF) ──
@@ -1155,32 +1436,10 @@ export const TEAM_MATURITY = {
 };
 
 // ================================
-// 인맥 맵 데이터
+// 인맥 맵 데이터 (프로덕션에서 제거 예정)
 // ================================
-export type PersonNode = {
-  id: string;
-  name: string;
-  role: string;
-  team: string;
-  teamColor: string;
-  email: string;
-  aimiLevel: number;
-  aimiScore: number;
-  aimiLabel: string;
-  skills: string[];
-  joinDate: string;
-  bio: string;
-};
 
-export type RelationEdge = {
-  id: string;
-  source: string;
-  target: string;
-  type: "협업" | "멘토링" | "보고" | "프로젝트";
-  label?: string;
-};
-
-export const PEOPLE_NODES: PersonNode[] = [
+export const PEOPLE_NODES = [
   {
     id: "u-001", name: "강지수", role: "Frontend Engineer", team: "개발팀", teamColor: "#1722E8",
     email: "jisoo@softsquared.com", aimiLevel: 3, aimiScore: 42.1, aimiLabel: "Architect",
@@ -1231,17 +1490,9 @@ export const PEOPLE_NODES: PersonNode[] = [
   },
 ];
 
-export type AiCollabEdge = {
-  id: string;
-  source: string;
-  target: string;
-  aiType: "공동작업" | "AI 멘토링" | "리뷰" | "프롬프트 공유";
-  tool: string;
-  sessions: number;
-  topic: string;
-};
+// (AiCollabEdge 타입 제거됨 — 인맥맵 기능 삭제)
 
-export const AI_COLLAB_EDGES: AiCollabEdge[] = [
+export const AI_COLLAB_EDGES = [
   { id: "ai-01", source: "u-005", target: "u-001", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 8,  topic: "기술 리뷰" },
   { id: "ai-02", source: "u-005", target: "u-002", aiType: "AI 멘토링",    tool: "claude-sonnet-4", sessions: 6,  topic: "아키텍처 설계" },
   { id: "ai-03", source: "u-005", target: "u-007", aiType: "리뷰",         tool: "claude-sonnet-4", sessions: 4,  topic: "인프라 리뷰" },
@@ -1257,7 +1508,7 @@ export const AI_COLLAB_EDGES: AiCollabEdge[] = [
   { id: "ai-13", source: "u-005", target: "u-004", aiType: "공동작업",     tool: "claude-sonnet-4", sessions: 5,  topic: "로드맵 AI 검토" },
 ];
 
-export const RELATION_EDGES: RelationEdge[] = [
+export const RELATION_EDGES = [
   { id: "e-01", source: "u-005", target: "u-001", type: "멘토링", label: "기술 멘토링" },
   { id: "e-02", source: "u-005", target: "u-002", type: "멘토링", label: "아키텍처 리뷰" },
   { id: "e-03", source: "u-005", target: "u-007", type: "보고", label: "인프라 보고" },
@@ -1271,4 +1522,78 @@ export const RELATION_EDGES: RelationEdge[] = [
   { id: "e-11", source: "u-006", target: "u-004", type: "보고", label: "지표 리포트" },
   { id: "e-12", source: "u-005", target: "u-004", type: "협업", label: "로드맵 조율" },
   { id: "e-13", source: "u-001", target: "u-007", type: "협업", label: "배포 연동" },
+];
+
+// ================================
+// 보안 감지 규칙
+// ================================
+export const MOCK_RISK_RULES: RiskRule[] = [
+  {
+    id: "rule-001", name: "API 키 노출 감지", description: "프롬프트에 API 키, 시크릿 토큰 등 민감한 인증 정보가 포함된 경우를 탐지합니다.",
+    category: "confidential", severity: "critical", enabled: true,
+    patterns: ["sk-proj-", "sk-ant-", "AKIA", "ghp_", "xoxb-", "Bearer ey"],
+    match_field: "prompt", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-15T00:00:00Z",
+  },
+  {
+    id: "rule-002", name: "내부 인프라 정보 유출", description: "내부 서버 주소, 프로젝트 코드명 등 비공개 인프라 정보의 노출을 감지합니다.",
+    category: "confidential", severity: "warning", enabled: true,
+    patterns: ["internal-", ".softsquared.io", "ThinkTrace", "10.0.", "192.168."],
+    match_field: "both", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-15T00:00:00Z",
+  },
+  {
+    id: "rule-003", name: "비밀번호/시크릿 포함", description: "비밀번호, DB 자격증명, 시크릿 키 등이 프롬프트에 포함된 경우를 탐지합니다.",
+    category: "security", severity: "critical", enabled: true,
+    patterns: ["password", "비밀번호", "p@ss", "secret_key", "private_key", "DB_p@ss"],
+    match_field: "prompt", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-10T00:00:00Z",
+  },
+  {
+    id: "rule-004", name: "급여/보상 정보", description: "연봉, 급여, 보상 패키지 등 인사 관련 기밀 정보의 노출을 감지합니다.",
+    category: "compliance", severity: "critical", enabled: true,
+    patterns: ["연봉", "급여", "salary", "보상 패키지", "스톡옵션"],
+    match_field: "both", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-10T00:00:00Z",
+  },
+  {
+    id: "rule-005", name: "업무 외 사용 감지", description: "게임, 여행, 맛집 등 업무와 무관한 개인적 용도의 AI 사용을 감지합니다.",
+    category: "non_work", severity: "info", enabled: true,
+    patterns: ["게임 추천", "맛집", "여행 계획", "영화 추천", "주식 추천", "로또"],
+    match_field: "prompt", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-10T00:00:00Z",
+  },
+  {
+    id: "rule-006", name: "고객 개인정보 포함", description: "주민등록번호, 전화번호, 이메일 등 고객 PII(개인식별정보)의 포함 여부를 감지합니다.",
+    category: "compliance", severity: "critical", enabled: true,
+    patterns: ["주민등록", "주민번호", "카드번호", "계좌번호"],
+    match_field: "both", created_at: "2026-03-05T00:00:00Z", updated_at: "2026-03-15T00:00:00Z",
+  },
+  {
+    id: "rule-007", name: "소스코드 외부 반출 의심", description: "대량의 소스코드를 외부 서비스에 업로드하거나 공유하려는 시도를 감지합니다.",
+    category: "security", severity: "warning", enabled: true,
+    patterns: ["pastebin", "gist.github", "hastebin", "코드 전체를 복사"],
+    match_field: "prompt", created_at: "2026-03-05T00:00:00Z", updated_at: "2026-03-15T00:00:00Z",
+  },
+  {
+    id: "rule-008", name: "부적절한 콘텐츠 요청", description: "혐오 표현, 불법 콘텐츠 등 부적절한 요청을 감지합니다.",
+    category: "compliance", severity: "warning", enabled: false,
+    patterns: ["해킹 방법", "불법 다운로드", "크랙", "탈세 방법"],
+    match_field: "prompt", created_at: "2026-03-10T00:00:00Z", updated_at: "2026-03-10T00:00:00Z",
+  },
+  {
+    id: "rule-009", name: "경쟁사 기밀 분석 요청", description: "경쟁사의 미공개 정보나 영업비밀에 대한 분석 요청을 감지합니다.",
+    category: "compliance", severity: "warning", enabled: true,
+    patterns: ["경쟁사 내부", "유출된 자료", "비공개 문서"],
+    match_field: "prompt", created_at: "2026-03-10T00:00:00Z", updated_at: "2026-03-10T00:00:00Z",
+  },
+];
+
+// ================================
+// 보안 감지 알림
+// ================================
+export const MOCK_RISK_ALERTS: RiskAlert[] = [
+  { id: "alert-001", rule_id: "rule-001", log_id: "log-risk-001", severity: "critical", matched_pattern: "sk-proj-", matched_text_preview: "...API 키를 사용해서... sk-proj-abc123def456ghi789...", timestamp: "2026-03-25T09:15:01Z", dismissed: false },
+  { id: "alert-002", rule_id: "rule-005", log_id: "log-risk-002", severity: "info", matched_pattern: "게임 추천", matched_text_preview: "...재밌는 PC 게임 추천해줘. RPG 장르 위주로...", timestamp: "2026-03-25T13:40:01Z", dismissed: false },
+  { id: "alert-003", rule_id: "rule-002", log_id: "log-risk-003", severity: "warning", matched_pattern: "ThinkTrace", matched_text_preview: "ThinkTrace 프로젝트의 내부 아키텍처 다이어그램을...", timestamp: "2026-03-26T10:20:01Z", dismissed: false },
+  { id: "alert-004", rule_id: "rule-002", log_id: "log-risk-003", severity: "warning", matched_pattern: "internal-", matched_text_preview: "...서버는 internal-api.softsquared.io:8443 에...", timestamp: "2026-03-26T10:20:02Z", dismissed: false },
+  { id: "alert-005", rule_id: "rule-003", log_id: "log-risk-003", severity: "critical", matched_pattern: "DB_p@ss", matched_text_preview: "...DB 비밀번호는 Prod_DB_p@ss2026! 이고...", timestamp: "2026-03-26T10:20:03Z", dismissed: false },
+  { id: "alert-006", rule_id: "rule-004", log_id: "log-risk-004", severity: "critical", matched_pattern: "연봉", matched_text_preview: "...직원들 연봉 테이블을 정리해줘. 팀장급은 7000만원...", timestamp: "2026-03-27T15:00:01Z", dismissed: false },
+  { id: "alert-007", rule_id: "rule-002", log_id: "log-risk-003", severity: "warning", matched_pattern: ".softsquared.io", matched_text_preview: "...internal-api.softsquared.io:8443 에 있어.", timestamp: "2026-03-26T10:20:04Z", dismissed: true },
+  { id: "alert-008", rule_id: "rule-003", log_id: "log-risk-003", severity: "critical", matched_pattern: "비밀번호", matched_text_preview: "...DB 비밀번호는 Prod_DB_p@ss2026!...", timestamp: "2026-03-26T10:20:05Z", dismissed: true },
 ];

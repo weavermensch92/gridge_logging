@@ -8,8 +8,10 @@ import {
   Search, Filter, Calendar, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Activity, DollarSign, Clock, Zap, History,
+  Bot, Terminal, FileCode, Edit3, Search as SearchIcon, Globe,
 } from "lucide-react";
-import { MY_LOGS, MATURITY_DATA, Log } from "@/lib/mockData";
+import type { Log } from "@/types";
+import { MY_LOGS, MATURITY_DATA } from "@/lib/mockData";
 import clsx from "clsx";
 
 const CHANNEL_COLORS: Record<string, string> = {
@@ -45,8 +47,117 @@ function toDateString(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function LogRow({ log }: { log: Log }) {
+// ── 에이전트 모드 헬퍼 ──
+const isAgentLog = (log: Log) => log.mode === "agent" && !!log.agent_detail;
+
+const PHASE_STYLE: Record<string, { color: string; bg: string; label: string }> = {
+  plan:     { color: "#3b82f6", bg: "#eff6ff", label: "Plan" },
+  execute:  { color: "#7c3aed", bg: "#f5f3ff", label: "Execute" },
+  verify:   { color: "#10b981", bg: "#ecfdf5", label: "Verify" },
+  iterate:  { color: "#f59e0b", bg: "#fffbeb", label: "Iterate" },
+};
+
+const TOOL_ICON: Record<string, React.ReactNode> = {
+  bash: <Terminal className="w-3 h-3" />,
+  file_read: <FileCode className="w-3 h-3" />,
+  file_write: <FileCode className="w-3 h-3" />,
+  edit: <Edit3 className="w-3 h-3" />,
+  grep: <SearchIcon className="w-3 h-3" />,
+  glob: <SearchIcon className="w-3 h-3" />,
+  web_search: <Globe className="w-3 h-3" />,
+};
+
+const FILE_ACTION_STYLE: Record<string, { color: string; label: string }> = {
+  created:  { color: "#10b981", label: "+" },
+  modified: { color: "#3b82f6", label: "~" },
+  deleted:  { color: "#ef4444", label: "-" },
+};
+
+function AgentBriefModal({ log, onClose }: { log: Log; onClose: () => void }) {
+  const d = log.agent_detail!;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+      onClick={onClose}>
+      <div className="glass rounded-2xl p-6 w-[680px] max-h-[80vh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-violet-600" />
+            <div>
+              <h3 className="text-base font-bold text-gray-800">에이전트 기획 요약</h3>
+              <p className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center text-[10px] font-bold text-violet-600">Q</div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">초기 요청 프롬프트</p>
+          </div>
+          <div className="bg-violet-50/60 rounded-xl p-3 text-sm text-gray-700 leading-relaxed border border-violet-100">{log.prompt}</div>
+        </div>
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-600">R</div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">구현 결과 요약</p>
+          </div>
+          <div className="bg-emerald-50/60 rounded-xl p-3 text-sm text-gray-700 leading-relaxed border border-emerald-100">{d.summary}</div>
+        </div>
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">단계별 실행 흐름</p>
+          <div className="flex items-center gap-1 flex-wrap">
+            {d.steps.map((step, i) => {
+              const ps = PHASE_STYLE[step.phase];
+              return (
+                <div key={step.step} className="flex items-center gap-1">
+                  <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: ps.bg, color: ps.color }}>
+                    {step.step}. {step.description}
+                  </span>
+                  {i < d.steps.length - 1 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">파일 변경 내역 ({d.files_changed.length}개)</p>
+          <div className="bg-white/50 rounded-xl p-3 space-y-1.5">
+            {d.files_changed.map(fc => {
+              const as = FILE_ACTION_STYLE[fc.action];
+              const actionLabel = fc.action === "created" ? "생성" : fc.action === "modified" ? "수정" : "삭제";
+              return (
+                <div key={fc.path} className="flex items-center gap-2 text-xs">
+                  <span className="font-bold w-8 text-center text-[10px] px-1 py-0.5 rounded" style={{ background: `${as.color}18`, color: as.color }}>{actionLabel}</span>
+                  <span className="font-mono text-gray-600 flex-1 truncate">{fc.path}</span>
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">{fc.language}</span>
+                  <span className="text-green-600 text-[10px]">+{fc.additions}</span>
+                  {fc.deletions > 0 && <span className="text-red-400 text-[10px]">-{fc.deletions}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogRow({ log, onShowBrief }: { log: Log; onShowBrief?: (log: Log) => void }) {
   const [open, setOpen] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
+  const [showCode, setShowCode] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const agent = isAgentLog(log);
+  const d = log.agent_detail;
+
+  const toggleStep = (s: number) => setExpandedSteps(prev => {
+    const next = new Set(prev);
+    next.has(s) ? next.delete(s) : next.add(s);
+    return next;
+  });
 
   return (
     <>
@@ -55,12 +166,31 @@ function LogRow({ log }: { log: Log }) {
         onClick={() => setOpen(v => !v)}
       >
         <td className="px-4 py-3">
-          <span className={clsx("text-xs font-medium px-2 py-0.5 rounded-full", CHANNEL_COLORS[log.channel])}>
-            {log.channel}
+          <span className="flex items-center gap-1">
+            <span className={clsx("text-xs font-medium px-2 py-0.5 rounded-full", CHANNEL_COLORS[log.channel])}>
+              {log.channel}
+            </span>
+            {agent && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 flex items-center gap-0.5">
+                <Bot className="w-3 h-3" /> Agent
+              </span>
+            )}
           </span>
         </td>
         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{log.model}</td>
-        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">{log.prompt}</td>
+        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+          <span className="flex items-center gap-1.5">
+            {agent ? d!.summary : log.prompt}
+            {agent && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onShowBrief?.(log); }}
+                className="flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 hover:bg-violet-200 transition-colors whitespace-nowrap"
+              >
+                요약 보기
+              </button>
+            )}
+          </span>
+        </td>
         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
           {log.input_tokens + log.output_tokens}
         </td>
@@ -68,7 +198,7 @@ function LogRow({ log }: { log: Log }) {
           ${log.cost_usd.toFixed(6)}
         </td>
         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-          {log.latency_ms}ms
+          {agent ? `${(log.latency_ms / 1000).toFixed(0)}s` : `${log.latency_ms}ms`}
         </td>
         <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
           {new Date(log.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
@@ -80,34 +210,155 @@ function LogRow({ log }: { log: Log }) {
       {open && (
         <tr className="bg-white/20">
           <td colSpan={8} className="px-6 py-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
-                <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
-                <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 gap-3 mt-3">
-              <div className="bg-white/40 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-400">입력 토큰</p>
-                <p className="text-sm font-semibold text-gray-700">{log.input_tokens.toLocaleString()}</p>
-              </div>
-              <div className="bg-white/40 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-400">출력 토큰</p>
-                <p className="text-sm font-semibold text-gray-700">{log.output_tokens.toLocaleString()}</p>
-              </div>
-              <div className="bg-white/40 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-400">비용</p>
-                <p className="text-sm font-semibold text-gray-700">${log.cost_usd.toFixed(6)}</p>
-              </div>
-              <div className="bg-white/40 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-400">응답 속도</p>
-                <p className="text-sm font-semibold text-gray-700">{log.latency_ms}ms</p>
-              </div>
-            </div>
+            {agent && d ? (
+              <>
+                {/* 세션 헤더 */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: "소요 시간", value: `${(d.session_duration_ms / 1000).toFixed(0)}초` },
+                    { label: "스텝 수", value: `${d.total_steps}단계` },
+                    { label: "도구 호출", value: `${d.total_tool_calls}회` },
+                    { label: "변경 파일", value: `${d.files_changed.length}개` },
+                  ].map(s => (
+                    <div key={s.label} className="bg-violet-50/80 rounded-xl px-3 py-2 text-center">
+                      <div className="text-sm font-bold text-violet-700">{s.value}</div>
+                      <div className="text-[10px] text-violet-400">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-5 gap-4 mb-4">
+                  {/* 워크플로 타임라인 */}
+                  <div className="col-span-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Workflow Timeline</p>
+                    <div className="space-y-2">
+                      {d.steps.map(step => {
+                        const ps = PHASE_STYLE[step.phase];
+                        const isOpen = expandedSteps.has(step.step);
+                        return (
+                          <div key={step.step} className="bg-white/50 rounded-xl overflow-hidden">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleStep(step.step); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/40 transition-colors"
+                            >
+                              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: ps.bg, color: ps.color }}>
+                                {ps.label}
+                              </span>
+                              <span className="text-xs text-gray-700 flex-1">{step.description}</span>
+                              <span className="text-[10px] text-gray-400">{step.tool_calls.length} calls</span>
+                              {isOpen ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                            </button>
+                            {isOpen && (
+                              <div className="px-3 pb-2 space-y-1">
+                                {step.tool_calls.map(tc => (
+                                  <div key={tc.id} className="flex items-center gap-2 text-[11px] py-1 px-2 bg-gray-50/80 rounded-lg">
+                                    <span className="text-gray-400">{TOOL_ICON[tc.type] ?? <Terminal className="w-3 h-3" />}</span>
+                                    <span className="font-mono text-gray-600 truncate max-w-[200px]">{tc.input}</span>
+                                    <span className="text-gray-400 truncate flex-1">{tc.output_summary}</span>
+                                    <span className="text-gray-300 text-[10px] flex-shrink-0">{tc.duration_ms}ms</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 파일 변경 패널 */}
+                  <div className="col-span-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-2">File Changes</p>
+                    <div className="bg-white/50 rounded-xl p-3 space-y-1.5">
+                      {d.files_changed.map(fc => {
+                        const as = FILE_ACTION_STYLE[fc.action];
+                        return (
+                          <div key={fc.path} className="flex items-center gap-2 text-[11px]">
+                            <span className="font-bold w-4 text-center" style={{ color: as.color }}>{as.label}</span>
+                            <span className="font-mono text-gray-600 truncate flex-1">{fc.path}</span>
+                            <span className="text-green-600 text-[10px]">+{fc.additions}</span>
+                            {fc.deletions > 0 && <span className="text-red-500 text-[10px]">-{fc.deletions}</span>}
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-100 text-gray-500">{fc.language}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 코드 산출물 */}
+                {d.code_artifacts.length > 0 && (
+                  <div className="mb-3">
+                    <button onClick={(e) => { e.stopPropagation(); setShowCode(!showCode); }}
+                      className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase mb-1 hover:text-gray-600">
+                      <FileCode className="w-3 h-3" /> Code Artifacts
+                      {showCode ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                    {showCode && (
+                      <div className="space-y-2">
+                        {d.code_artifacts.map(ca => (
+                          <div key={ca.filename}>
+                            <div className="text-[10px] font-mono text-gray-400 mb-0.5">{ca.filename}</div>
+                            <pre className="bg-gray-900 text-green-400 text-[11px] rounded-lg p-3 overflow-x-auto font-mono leading-relaxed">
+                              {ca.snippet}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Raw Prompt/Response */}
+                <button onClick={(e) => { e.stopPropagation(); setShowRaw(!showRaw); }}
+                  className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase hover:text-gray-600">
+                  Raw Prompt / Response {showRaw ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {showRaw && (
+                  <div className="grid grid-cols-2 gap-4 mt-2 text-sm">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
+                      <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
+                      <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Prompt</p>
+                    <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.prompt}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Response</p>
+                    <p className="text-gray-700 bg-white/50 rounded-lg p-3 whitespace-pre-wrap">{log.response}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-3 mt-3">
+                  <div className="bg-white/40 rounded-lg p-2 text-center">
+                    <p className="text-xs text-gray-400">입력 토큰</p>
+                    <p className="text-sm font-semibold text-gray-700">{log.input_tokens.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white/40 rounded-lg p-2 text-center">
+                    <p className="text-xs text-gray-400">출력 토큰</p>
+                    <p className="text-sm font-semibold text-gray-700">{log.output_tokens.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white/40 rounded-lg p-2 text-center">
+                    <p className="text-xs text-gray-400">비용</p>
+                    <p className="text-sm font-semibold text-gray-700">${log.cost_usd.toFixed(6)}</p>
+                  </div>
+                  <div className="bg-white/40 rounded-lg p-2 text-center">
+                    <p className="text-xs text-gray-400">응답 속도</p>
+                    <p className="text-sm font-semibold text-gray-700">{agent ? `${(log.latency_ms / 1000).toFixed(0)}s` : `${log.latency_ms}ms`}</p>
+                  </div>
+                </div>
+              </>
+            )}
           </td>
         </tr>
       )}
@@ -127,6 +378,7 @@ export default function DeveloperPage() {
   const [dateTo, setDateTo]             = useState("");
   const [activePreset, setActivePreset] = useState<string>("");
   const [page, setPage]                 = useState(1);
+  const [briefLog, setBriefLog]         = useState<Log | null>(null);
 
   // 모델 목록 동적 생성
   const modelList = useMemo(() => {
@@ -178,7 +430,7 @@ export default function DeveloperPage() {
       if (logDate > dateTo) return false;
     }
     return true;
-  }), [channelFilter, modelFilter, search, dateFrom, dateTo]);
+  }).sort((a, b) => b.timestamp.localeCompare(a.timestamp)), [channelFilter, modelFilter, search, dateFrom, dateTo]);
 
   // 필터된 통계
   const filteredStats = useMemo(() => ({
@@ -468,7 +720,7 @@ export default function DeveloperPage() {
               </thead>
               <tbody>
                 {paginated.length > 0
-                  ? paginated.map(log => <LogRow key={log.id} log={log} />)
+                  ? paginated.map(log => <LogRow key={log.id} log={log} onShowBrief={setBriefLog} />)
                   : (
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
@@ -572,6 +824,7 @@ export default function DeveloperPage() {
           </div>
         </div>
       </div>
+      {briefLog && <AgentBriefModal log={briefLog} onClose={() => setBriefLog(null)} />}
     </main>
   );
 }

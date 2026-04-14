@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Gridge AI Logger",
+  "version": "1.0.0",
+  "description": "AI 사용 로그를 자동 수집하여 Gridge 플랫폼으로 전송합니다.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "*://localhost/*",
+    "*://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content-scripts/claude-capture.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content-scripts/gemini-capture.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js", "config.json"],
+      "matches": ["https://claude.ai/*", "https://gemini.google.com/*"]
+    }
+  ]
+}

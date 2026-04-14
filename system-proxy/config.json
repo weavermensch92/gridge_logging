@@ -1,0 +1,22 @@
+{
+  "port": 9090,
+  "serverUrl": "",
+  "apiKey": "",
+  "userId": "",
+
+  "interceptDomains": [
+    "api.anthropic.com",
+    "api.openai.com",
+    "claude.ai",
+    "chatgpt.com",
+    "chat.openai.com"
+  ],
+
+  "captureMode": "company_only",
+
+  "companyApiKeys": [],
+
+  "companySessionPatterns": [
+    "company-session-prefix"
+  ]
+}

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gridge AI Logger</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+    .header {
+      background: #1722E8;
+      color: white;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-icon {
+      width: 28px; height: 28px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 14px;
+    }
+    .header h1 { font-size: 14px; font-weight: 700; }
+    .header p { font-size: 10px; opacity: 0.7; }
+    .status-bar {
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: white; border-bottom: 1px solid #eee;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.on { background: #10b981; }
+    .status-dot.off { background: #ef4444; }
+    .status-dot.pending { background: #f59e0b; }
+    .status-text { font-size: 12px; color: #666; }
+    .toggle-btn {
+      padding: 4px 12px; border-radius: 6px; border: none;
+      font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .toggle-btn.on { background: #10b981; color: white; }
+    .toggle-btn.off { background: #eee; color: #999; }
+    .section { padding: 16px; background: white; margin-top: 1px; }
+    .section-title {
+      font-size: 10px; font-weight: 700; color: #999;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+    }
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
+    .field input {
+      width: 100%; padding: 8px 10px; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 12px; outline: none;
+    }
+    .field input:focus { border-color: #1722E8; }
+    .save-btn {
+      width: 100%; padding: 10px; background: #1722E8; color: white;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .save-btn:hover { opacity: 0.9; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .stat-card { background: #f9f9f9; border-radius: 8px; padding: 10px; text-align: center; }
+    .stat-card .value { font-size: 18px; font-weight: 800; color: #333; }
+    .stat-card .label { font-size: 10px; color: #999; margin-top: 2px; }
+    .msg { font-size: 11px; padding: 8px; border-radius: 6px; margin-top: 8px; text-align: center; }
+    .msg.success { background: #ecfdf5; color: #059669; }
+    .msg.error { background: #fef2f2; color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">G</div>
+    <div>
+      <h1>Gridge AI Logger</h1>
+      <p>AI 사용 로그 자동 수집</p>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div>
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">확인 중...</span>
+    </div>
+    <button class="toggle-btn" id="toggleBtn">-</button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">수집 현황</div>
+    <div class="stats">
+      <div class="stat-card">
+        <div class="value" id="queueCount">-</div>
+        <div class="label">전송 대기</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="captureCount">-</div>
+        <div class="label">수집 지원</div>
+      </div>
+    </div>
+    <button class="save-btn" id="flushBtn" style="background:#f59e0b">지금 전송</button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">서버 연결 설정</div>
+    <div class="field">
+      <label>Gridge 서버 URL</label>
+      <input type="url" id="serverUrl" placeholder="https://gridge.company.com">
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="text" id="apiKey" placeholder="ext_xxxxx">
+    </div>
+    <div class="field">
+      <label>유저 ID</label>
+      <input type="text" id="userId" placeholder="u-001">
+    </div>
+    <button class="save-btn" id="saveBtn">설정 저장</button>
+    <div id="message" class="msg" style="display:none"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

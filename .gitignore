@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -41,3 +42,20 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# installer output (멤버별 빌드 결과물)
+installer/output/
+
+# 프록시 설정 (민감 정보 포함 가능)
+local-proxy/config.json
+system-proxy/config.json
+system-proxy/certs/
+
+# 테스트 다운로드
+downloads/test/
+sandbox/ai-analyzer/orgs/*/pending*.jsonl
+sandbox/ai-analyzer/orgs/*/results.jsonl
+sandbox/ai-analyzer/orgs/*/alerts.json
+sandbox/ai-analyzer/orgs/*/coaching.jsonl
+sandbox/ai-analyzer/orgs/*/error.jsonl
+sandbox/ai-analyzer/orgs/*/regex-alerts.jsonl

@@ -1,0 +1,10 @@
+{"type":"user","message":{"content":"Next.js에서 middleware로 인증 처리하는 방법을 알려줘"},"timestamp":"2026-04-14T10:00:00Z"}
+{"type":"assistant","message":{"content":"Next.js App Router에서 middleware를 사용한 인증 처리 방법을 설명드리겠습니다...","model":"claude-sonnet-4","usage":{"input_tokens":50,"output_tokens":200}},"timestamp":"2026-04-14T10:00:05Z"}
+{"type":"user","message":{"content":"이 API 키로 연결해줘: sk-proj-abc123secret456"},"timestamp":"2026-04-14T10:01:00Z"}
+{"type":"assistant","message":{"content":"해당 API 키로 연결하겠습니다. sk-proj-abc123secret456를 사용하여...","model":"claude-sonnet-4","usage":{"input_tokens":30,"output_tokens":100}},"timestamp":"2026-04-14T10:01:03Z"}
+{"type":"user","message":{"content":"DB 비밀번호는 MySecretP@ss123 이야, 이걸로 접속해줘"},"timestamp":"2026-04-14T10:02:00Z"}
+{"type":"assistant","message":{"content":"해당 비밀번호로 데이터베이스에 접속하겠습니다...","model":"claude-sonnet-4","usage":{"input_tokens":25,"output_tokens":80}},"timestamp":"2026-04-14T10:02:02Z"}
+{"type":"user","message":{"content":"src/api.ts 파일을 읽어줘"},"timestamp":"2026-04-14T10:03:00Z"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tc-1","name":"file_read","input":{"path":"src/api.ts"}},{"type":"text","text":"파일을 읽겠습니다."}],"model":"claude-sonnet-4","usage":{"input_tokens":20,"output_tokens":150}},"timestamp":"2026-04-14T10:03:02Z"}
+{"type":"user","message":{"content":"오늘 점심 뭐 먹을까?"},"timestamp":"2026-04-14T10:04:00Z"}
+{"type":"assistant","message":{"content":"점심 추천 드리겠습니다! 날씨가 좋으니 샐러드는 어떨까요?","model":"claude-sonnet-4","usage":{"input_tokens":10,"output_tokens":30}},"timestamp":"2026-04-14T10:04:01Z"}
