@@ -43,6 +43,7 @@ const FILES = [
   "chrome-extension/popup/popup.js",
   "chrome-extension/crypto.js",
   "local-proxy/proxy.js",
+  "local-proxy/watcher.js",
   "local-proxy/local-store.js",
   "local-proxy/sync.js",
   "local-proxy/package.json",
@@ -141,7 +142,7 @@ cat > "$AGENT_DIR/com.gridge.local-proxy.plist" << 'PLIST1'
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/node</string>
-    <string>${"${HOME}"}/.gridge/local-proxy/proxy.js</string>
+    <string>${"${HOME}"}/.gridge/local-proxy/watcher.js</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -171,13 +172,9 @@ echo "[5/6] 환경변수 설정..."
 SHELL_RC="$HOME/.zshrc"
 [ ! -f "$SHELL_RC" ] && SHELL_RC="$HOME/.bashrc"
 if [ -f "$SHELL_RC" ]; then
-  grep -q "ANTHROPIC_BASE_URL" "$SHELL_RC" || cat >> "$SHELL_RC" << 'ENV'
-
-# Gridge AI Logger
-export ANTHROPIC_BASE_URL=http://localhost:8080/v1
-ENV
+  grep -q "# Gridge AI Logger" "$SHELL_RC" || echo "# Gridge AI Logger — watcher mode (환경변수 변경 없음)" >> "$SHELL_RC"
 fi
-export ANTHROPIC_BASE_URL=http://localhost:8080/v1
+# 환경변수 변경 없음 — Claude Code 정상 동작 유지
 echo "  ✓ 완료"
 
 # 6. Chrome 실행 (Extension 자동 로드)
@@ -186,7 +183,7 @@ pkill -f "gridge.*proxy\\.js" 2>/dev/null || true
 sleep 1
 
 # 프록시가 LaunchAgent로 자동 시작되지만, 즉시 시작도 함
-nohup "$NODE_PATH" "$GRIDGE_HOME/local-proxy/proxy.js" > "$GRIDGE_HOME/local-proxy.log" 2>&1 &
+nohup "$NODE_PATH" "$GRIDGE_HOME/local-proxy/watcher.js" > "$GRIDGE_HOME/watcher.log" 2>&1 &
 
 # Chrome을 Extension 로드 상태로 실행
 CHROME_APP="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -269,21 +266,20 @@ echo   ✓ Chrome 정책 등록
 
 REM 4. 시작프로그램 등록
 echo [4/6] 시작프로그램 등록...
-reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "GridgeProxy" /t REG_SZ /d "node \\"%GRIDGE_HOME%\\local-proxy\\proxy.js\\"" /f >nul 2>&1
+reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "GridgeWatcher" /t REG_SZ /d "node \\"%GRIDGE_HOME%\\local-proxy\\watcher.js\\"" /f >nul 2>&1
 echo   ✓ 시작프로그램에 등록됨
 
 REM 5. 환경변수
 echo [5/6] 환경변수 설정...
-setx ANTHROPIC_BASE_URL "http://localhost:8080/v1" >nul 2>&1
-set ANTHROPIC_BASE_URL=http://localhost:8080/v1
-echo   ✓ ANTHROPIC_BASE_URL 설정됨
+REM 환경변수 변경 없음 — Claude Code 정상 동작 유지
+echo   ✓ Watcher 모드 (환경변수 변경 없음)
 
 REM 6. 프록시 시작 + Chrome 실행
 echo [6/6] 프록시 시작 + Chrome 실행...
 where node >nul 2>&1
 if %errorlevel%==0 (
   taskkill /f /fi "WINDOWTITLE eq Gridge*" >nul 2>&1
-  start "Gridge Proxy" /min node "%GRIDGE_HOME%\\local-proxy\\proxy.js"
+  start "Gridge Watcher" /min node "%GRIDGE_HOME%\\local-proxy\\watcher.js"
   echo   ✓ 프록시 실행 중
 ) else (
   echo   ✗ Node.js 필요: https://nodejs.org
