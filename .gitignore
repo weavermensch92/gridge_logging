@@ -53,3 +53,9 @@ system-proxy/certs/
 
 # 테스트 다운로드
 downloads/test/
+sandbox/ai-analyzer/orgs/*/pending*.jsonl
+sandbox/ai-analyzer/orgs/*/results.jsonl
+sandbox/ai-analyzer/orgs/*/alerts.json
+sandbox/ai-analyzer/orgs/*/coaching.jsonl
+sandbox/ai-analyzer/orgs/*/error.jsonl
+sandbox/ai-analyzer/orgs/*/regex-alerts.jsonl

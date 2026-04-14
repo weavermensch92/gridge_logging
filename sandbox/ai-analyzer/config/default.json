@@ -1,0 +1,25 @@
+{
+  "source": "mock",
+  "claude_cli_path": "claude",
+  "claude_flags": "--print",
+  "regex_filter": {
+    "suspect_thresholds": {
+      "input_tokens_min": 3000,
+      "prompt_length_min": 2000,
+      "code_block_lines_min": 100,
+      "table_rows_min": 20,
+      "email_pattern_min": 3,
+      "number_pattern_min": 3
+    }
+  },
+  "batch": {
+    "max_logs_per_batch": 50,
+    "prompt_preview_head": 500,
+    "prompt_preview_tail": 200
+  },
+  "coaching": {
+    "period": "weekly",
+    "sample_prompts_count": 5,
+    "sample_prompt_preview_length": 100
+  }
+}

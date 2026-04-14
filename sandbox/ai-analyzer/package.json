@@ -1,0 +1,16 @@
+{
+  "name": "gridge-ai-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "pipeline": "bash scripts/run-full-pipeline.sh",
+    "coaching": "bash scripts/run-coaching-pipeline.sh",
+    "test": "npx vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.4"
+  }
+}
